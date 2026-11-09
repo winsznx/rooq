@@ -1,0 +1,3 @@
+[workspace]
+members = ["lib", "transfer", "perp_open", "agg2"]
+default-member = "transfer"

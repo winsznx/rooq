@@ -1,0 +1,7 @@
+[package]
+name = "perp_open"
+type = "bin"
+compiler_version = ">=1.0.0"
+
+[dependencies]
+rooq_bench = { path = "../lib" }
