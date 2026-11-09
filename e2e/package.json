@@ -1,0 +1,27 @@
+{
+  "name": "@rooq/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "walkthrough": "bun run onchain/walkthrough.ts",
+    "private:shielded": "bun run private/shielded-flow.ts",
+    "private:liquidation": "bun run private/offline-liquidation.ts",
+    "private:spot": "bun run private/spot-flow.ts",
+    "typecheck": "tsc --noEmit",
+    "test:ui": "playwright test",
+    "screenshots": "playwright test --project=screens"
+  },
+  "dependencies": {
+    "@rooq/config": "workspace:*",
+    "@rooq/private-sdk": "workspace:*",
+    "@rooq/sdk": "workspace:*",
+    "viem": "2.40.3"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.0",
+    "@types/bun": "1.3.3",
+    "typescript": "5.9.3"
+  }
+}
