@@ -1,0 +1,49 @@
+# One Rooq private service per instance: rooq@read-api, rooq@risk-a, and so on.
+# PID 1 reads the two env files as root; the service runs as its own transient user (User= below gives one per instance,
+# DynamicUser alone would share one across all of them) and can't read them, so a compromised public service can't reach
+# another service's memory or secrets.
+[Unit]
+Description=Rooq private service %i
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rooq/current/apps/private-services
+EnvironmentFile=/etc/rooq/common.env
+EnvironmentFile=/etc/rooq/%i.env
+Environment=ROOQ_ENV=testnet NODE_ENV=production BIND_HOST=127.0.0.1 TRUST_PROXY=1
+Environment=HOME=/var/cache/rooq/%i
+ExecStart=/opt/rooq/current/infra/vps/run-service.sh %i
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+SyslogIdentifier=rooq-%i
+
+User=rooq-%i
+DynamicUser=yes
+CacheDirectory=rooq/%i
+ProtectProc=invisible
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+# Bun's JIT and WebAssembly need writable-then-executable pages, so MemoryDenyWriteExecute stays off.
+
+[Install]
+WantedBy=multi-user.target
