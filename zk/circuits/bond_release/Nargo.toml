@@ -1,0 +1,7 @@
+[package]
+name = "bond_release"
+type = "bin"
+compiler_version = ">=1.0.0"
+
+[dependencies]
+rooq_zk = { path = "../lib" }
