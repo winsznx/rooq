@@ -1,0 +1,21 @@
+# Public HTTPS for the two services browsers reach. Everything else stays on loopback.
+# Hostnames and the ACME email come from /etc/rooq/caddy.env (see docs/privacy/VPS_RUNBOOK.md).
+# Access logging is off, on purpose: Caddy logs requests only when a `log` directive is set, and a client IP must not
+# outlive the rate limiter's 60-second window (PRIV-01).
+{
+	email {$ROOQ_ACME_EMAIL}
+}
+
+{$ROOQ_READ_HOST} {
+	request_body {
+		max_size 1MB
+	}
+	reverse_proxy 127.0.0.1:8710
+}
+
+{$ROOQ_RELAYER_HOST} {
+	request_body {
+		max_size 1MB
+	}
+	reverse_proxy 127.0.0.1:8711
+}
