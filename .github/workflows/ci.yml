@@ -1,0 +1,49 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.7.1
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - name: Lockfile integrity
+        run: pnpm install --frozen-lockfile
+      - name: Spec sync (tokens and copy)
+        run: node packages/ui/scripts/check-sync.mjs
+      - name: Typecheck
+        run: pnpm -r --filter=./packages/* --filter=./apps/* --filter=./e2e exec tsc --noEmit
+      - name: Unit tests (SDK)
+        run: pnpm --filter @rooq/sdk test
+      - name: Contracts (unit, fuzz, invariant, parity)
+        working-directory: contracts
+        run: forge test
+        env:
+          FOUNDRY_PROFILE: ci
+      - name: Contract sizes under EIP-170
+        working-directory: contracts
+        run: forge build --sizes
+      - name: Rust parity kernel
+        run: cargo test --workspace
+      - name: Parity vectors are current
+        run: cargo run -q --bin gen-vectors && git diff --exit-code contracts/test/vectors
+      - name: Web build
+        run: pnpm --filter @rooq/web build
+        env:
+          NEXT_PUBLIC_ROOQ_ENV: local
