@@ -1,0 +1,50 @@
+asset = 0
+cm_out = [0, 0]
+ct = [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]]
+deployment = 0
+nf = [0, 0]
+public_asset = 0
+relayer = 0
+relayer_fee = 0
+root = 0
+sk = 0
+withdraw_amount = 0
+withdraw_recipient = 0
+
+[[ins]]
+blind = 0
+index = 0
+path = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+rho = 0
+value = 0
+
+[[ins]]
+blind = 0
+index = 0
+path = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+rho = 0
+value = 0
+
+[[outs]]
+blind = 0
+eph = 0
+recipient_auth = 0
+value = 0
+
+[outs.recipient_pk]
+x = 0
+y = 0
+
+[[outs]]
+blind = 0
+eph = 0
+recipient_auth = 0
+value = 0
+
+[outs.recipient_pk]
+x = 0
+y = 0
+
+[own_pk]
+x = 0
+y = 0
