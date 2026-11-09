@@ -1,0 +1,7 @@
+/* Positive and reversed colours from brand.json. The reversed mark is white on purpose, not the off-white text token. */
+.mark { flex: none; color: #0c0f10; }
+:global([data-theme="dark"]) .mark { color: #fff; }
+:global([data-theme="dark"]) .mark[data-surface="light"] { color: #0c0f10; }
+.horizontal { height: 48px; width: auto; aspect-ratio: 720 / 224; }
+.wordmark { width: 108px; height: auto; aspect-ratio: 444 / 160; }
+.micro { width: 24px; height: 24px; }

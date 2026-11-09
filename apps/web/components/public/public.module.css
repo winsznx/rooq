@@ -1,0 +1,43 @@
+.frame { padding: 0 var(--rq-page-gutter); }
+.main { padding-top: 84px; min-height: 60dvh; }
+
+/* The bar sits 16px outside the page gutter so its content lands exactly on the gutter. */
+.navWrap { position: fixed; top: 12px; left: 0; right: 0; z-index: var(--rq-z-header); padding-inline: max(8px, calc(max(var(--rq-page-gutter), 50% - 600px) - 16px)); pointer-events: none; }
+.nav { pointer-events: auto; }
+.nav { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 56px; padding: 0 15px; border: 1px solid var(--rq-line); border-radius: 28px; background: var(--rq-surface); transition: background-color var(--rq-t-nav) var(--rq-ease), border-color var(--rq-t-nav) var(--rq-ease); }
+
+.wordmark { justify-self: start; display: inline-flex; align-items: center; min-height: 44px; border-radius: 8px; }
+.logoWide { display: none; }
+.navLinks { display: none; gap: 32px; }
+.navLinks a { font-size: 14px; color: var(--rq-ink-secondary); text-decoration: none; transition: color var(--rq-t-press) var(--rq-ease); }
+.navLinks a:hover { color: var(--rq-ink); }
+.navRight { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 8px; }
+.launch { display: none; }
+.menu { display: inline-grid; place-items: center; width: 44px; height: 44px; border: 0; background: transparent; color: var(--rq-ink); cursor: pointer; }
+.sheet { position: absolute; top: calc(100% + 8px); left: 0; right: 0; display: grid; gap: 2px; padding: 12px; border: 1px solid var(--rq-line); border-radius: 24px; background: color-mix(in srgb, var(--rq-surface-raised) 92%, transparent); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+.sheet a:not(:global(.btn)) { display: flex; align-items: center; min-height: 48px; padding: 0 10px; color: var(--rq-ink); text-decoration: none; }
+
+.footer { position: relative; margin-top: 96px; overflow: hidden; }
+.disclosure { display: grid; gap: 12px; padding: 32px 0; border-top: 1px solid var(--rq-line); border-bottom: 1px solid var(--rq-line); font-size: 13px; line-height: 1.5; color: var(--rq-ink-secondary); }
+.disclosure p { margin: 0; max-width: 72ch; }
+.runsOn { color: var(--rq-ink-tertiary); }
+.footerGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 24px; padding: 48px 0 56px; }
+.footerBrand { grid-column: 1 / -1; display: grid; gap: 16px; justify-items: start; align-content: start; }
+.footerBrand p { margin: 0; max-width: 40ch; font-size: 14px; line-height: 1.5; color: var(--rq-ink-secondary); }
+.footerGrid nav { display: grid; gap: 14px; align-content: start; }
+.footerGrid h2 { margin: 0 0 6px; font-size: 14px; font-weight: 400; color: var(--rq-ink-tertiary); }
+.footerGrid a { font-size: 14px; color: var(--rq-ink); text-decoration: none; }
+.footerGrid a:hover { color: var(--rq-ink-secondary); }
+.ghost { padding: 0 var(--rq-page-gutter); user-select: none; }
+.ghost .ghostMark { display: block; width: 100%; opacity: 0.08; }
+@media (min-width: 900px) {
+  .nav { height: 64px; border-radius: 32px; }
+  .logoWide { display: block; }
+  .logoCompact { display: none; }
+  .navLinks { display: flex; }
+  .launch { display: inline-flex; }
+  .menu { display: none; }
+  .disclosure { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 48px; }
+  .footerGrid { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); }
+  .footerBrand { grid-column: auto; }
+}
