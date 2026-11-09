@@ -1,0 +1,89 @@
+{
+  "status": "PROVISIONAL TESTNET VALUES. Not calibrated, not reviewed, not for real money.",
+  "source": "ROOQ_MASTER_PRD.md section 5.4; DERIVATIVES_MATH_AND_RISK.md 'Risk constraints and expected bounds'",
+  "units": {
+    "fractions": "WAD decimal strings (1e18 = 100%)",
+    "usd": "WAD decimal strings (1e18 = 1 USD)",
+    "collateral": "collateral token units (USDG and mUSD use 6 decimals)",
+    "bps": "basis points"
+  },
+  "globalBounds": {
+    "minImrWad": "333400000000000000",
+    "minMmrWad": "200000000000000000",
+    "maxOiUsdWad": "2000000000000000000000000",
+    "maxTakerFeeBps": 50,
+    "maxLiqPenaltyBps": 300,
+    "maxDeviationBps": 300,
+    "maxFundingRatePerHourWad": "1000000000000000"
+  },
+  "tiers": [
+    {
+      "id": 1,
+      "name": "A",
+      "label": "Major crypto, independent feed",
+      "maxLeverage": "3x",
+      "imrWad": "333400000000000000",
+      "mmrWad": "200000000000000000",
+      "maxOiUsdWad": "500000000000000000000000",
+      "takerFeeBps": 6,
+      "makerFeeBps": 0,
+      "liqPenaltyBps": 100,
+      "maxDeviationBps": 150,
+      "maxFundingRatePerHourWad": "100000000000000",
+      "minMakerBacking": "5000000000",
+      "minBond": "150000000",
+      "version": 1
+    },
+    {
+      "id": 2,
+      "name": "B",
+      "label": "Liquid smaller asset",
+      "maxLeverage": "2x",
+      "imrWad": "500000000000000000",
+      "mmrWad": "350000000000000000",
+      "maxOiUsdWad": "100000000000000000000000",
+      "takerFeeBps": 6,
+      "makerFeeBps": 0,
+      "liqPenaltyBps": 100,
+      "maxDeviationBps": 200,
+      "maxFundingRatePerHourWad": "100000000000000",
+      "minMakerBacking": "2000000000",
+      "minBond": "150000000",
+      "version": 1
+    },
+    {
+      "id": 3,
+      "name": "C",
+      "label": "Verified volatile asset",
+      "maxLeverage": "1.25x",
+      "imrWad": "800000000000000000",
+      "mmrWad": "650000000000000000",
+      "maxOiUsdWad": "10000000000000000000000",
+      "takerFeeBps": 10,
+      "makerFeeBps": 0,
+      "liqPenaltyBps": 200,
+      "maxDeviationBps": 300,
+      "maxFundingRatePerHourWad": "200000000000000",
+      "minMakerBacking": "2000000000",
+      "minBond": "150000000",
+      "version": 1
+    },
+    {
+      "id": 4,
+      "name": "S",
+      "label": "Stock Token, testnet sample feed",
+      "maxLeverage": "2x",
+      "imrWad": "500000000000000000",
+      "mmrWad": "350000000000000000",
+      "maxOiUsdWad": "50000000000000000000000",
+      "takerFeeBps": 6,
+      "makerFeeBps": 0,
+      "liqPenaltyBps": 100,
+      "maxDeviationBps": 150,
+      "maxFundingRatePerHourWad": "100000000000000",
+      "minMakerBacking": "2000000000",
+      "minBond": "150000000",
+      "version": 1
+    }
+  ]
+}
