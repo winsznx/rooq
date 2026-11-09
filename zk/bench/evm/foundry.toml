@@ -1,0 +1,15 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["../../../contracts/lib"]
+remappings = [
+  "forge-std/=../../../contracts/lib/forge-std/src/",
+  "openzeppelin/=../../../contracts/lib/openzeppelin-contracts/",
+  "risc0/=lib/risc0-ethereum/contracts/src/",
+]
+solc = "0.8.28"
+optimizer = true
+optimizer_runs = 1
+evm_version = "cancun"
+fs_permissions = [{ access = "read", path = "../noir/out" }, { access = "read", path = "../risc0/out" }]
