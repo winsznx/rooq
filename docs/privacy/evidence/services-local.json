@@ -1,0 +1,323 @@
+{
+  "note": "Local anvil (31337) on the test's own ports. Services as separate OS processes, real UltraHonk proofs, anvil's public keys and synthetic seeds.",
+  "startedAt": "2026-11-09T01:43:54.179Z",
+  "finishedAt": "2026-11-09T01:57:34.242Z",
+  "passed": false,
+  "logDir": "/var/folders/jz/4r875xns6z57sm2r92bz7xlm0000gn/T/rooq-services-test-27732/logs",
+  "steps": [
+    {
+      "step": "all seven services start as separate OS processes and report healthy",
+      "ok": true,
+      "ms": 13618,
+      "detail": {
+        "pids": {
+          "read-api": 28242,
+          "relayer": 28243,
+          "queue": 28244,
+          "coordinator": 28245,
+          "risk-a": 28246,
+          "risk-b": 28247,
+          "maker": 28248
+        }
+      }
+    },
+    {
+      "step": "the queue processor moves shielded deposits into the tree",
+      "ok": true,
+      "ms": 4,
+      "detail": {
+        "processed": 28,
+        "root": "0x15fce99be92384e39f9ee939b14ca087059ccd911f222ee3e599d09fb44ef07f"
+      }
+    },
+    {
+      "step": "client locks through the relayer; the coordinator matches it against a maker lock at the mark plus spread",
+      "ok": true,
+      "ms": 14317,
+      "detail": {
+        "entry": "250500000000000000000",
+        "size": "4000000000000000000"
+      }
+    },
+    {
+      "step": "price moves; a risk worker liquidates with the traders offline, and the owner recovers its output",
+      "ok": true,
+      "ms": 4529,
+      "detail": {
+        "takerOut": "11280000",
+        "reward": "4360000",
+        "liquidations": 1
+      }
+    },
+    {
+      "step": "a claim from a shortfall is redeemed through the relayer once its epoch has folded",
+      "ok": true,
+      "ms": 20988,
+      "detail": {
+        "claim": "27800000",
+        "ratio": "156834532374100719",
+        "paid": "4359999"
+      }
+    },
+    {
+      "step": "automatic claim redemption: an owner is paid with no action once a worker sees the folded ratio",
+      "ok": true,
+      "ms": 80560,
+      "detail": {
+        "claim": "27800000",
+        "paid": "3600000",
+        "claimsRedeemed": 1
+      }
+    },
+    {
+      "step": "a real mempool race: both workers submit the same liquidation, the shared nullifier refuses one, and neither stops",
+      "ok": true,
+      "ms": 16217,
+      "detail": {
+        "inPool": 2,
+        "lostRaces": 5
+      }
+    },
+    {
+      "step": "price moves under the coordinator's proof: it re-proves at the new price and the pair opens",
+      "ok": true,
+      "ms": 9643,
+      "detail": {
+        "entry": "101202000000000000000",
+        "reproved": 1
+      }
+    },
+    {
+      "step": "worker A is killed mid-run; worker B liquidates alone",
+      "ok": true,
+      "ms": 22953,
+      "detail": {
+        "riskB": 4
+      }
+    },
+    {
+      "step": "the queue service is killed; a risk worker's fallback keeps the tree moving",
+      "ok": true,
+      "ms": 17641,
+      "detail": {
+        "fallbackBatches": 2
+      }
+    },
+    {
+      "step": "worker A restarts with no local state and rebuilds the same view from chain plus its key",
+      "ok": true,
+      "ms": 406,
+      "detail": {
+        "pairsTracked": 7,
+        "claimsTracked": 7,
+        "sameAsB": true
+      }
+    },
+    {
+      "step": "the coordinator restarts with no state and matches a lock placed while it was down",
+      "ok": true,
+      "ms": 8946,
+      "detail": {
+        "entry": "100200000000000000000"
+      }
+    },
+    {
+      "step": "the read API and relayer restart with no state: the read API rebuilds, the relayer recovers jobs from the chain",
+      "ok": true,
+      "ms": 5562,
+      "detail": {
+        "recoveredTx": "0xca3832a2dd85d3d0f75f2585028ceaf0bf6930ea802e5a184402c06a8c2c5c25"
+      }
+    },
+    {
+      "step": "funding: epochs advance from the workers, a worker settles funding on the open pair with no owner key",
+      "ok": true,
+      "ms": 6324,
+      "detail": {
+        "notesBefore": 19,
+        "fundingIndex": "340282366920938463468472774098434551840",
+        "takerMarginAfter": "55000000"
+      }
+    },
+    {
+      "step": "the taker adds margin through the relayer",
+      "ok": true,
+      "ms": 4971,
+      "detail": {
+        "takerMargin": "59993055"
+      }
+    },
+    {
+      "step": "the taker closes through the relayer at the mark less the committed spread, and is paid",
+      "ok": true,
+      "ms": 6171,
+      "detail": {
+        "takerOut": "69456110",
+        "makerOut": "7543890"
+      }
+    },
+    {
+      "step": "a forced exit: the owner requests it through the relayer and, after the delay, a worker closes it with nobody online",
+      "ok": true,
+      "ms": 21165,
+      "detail": {
+        "forcedCloses": 1
+      }
+    },
+    {
+      "step": "an unmatched lock is released after expiry through the relayer, and a note is spent and withdrawn through it",
+      "ok": true,
+      "ms": 15193,
+      "detail": {
+        "released": "7000000",
+        "withdrawn": "11000000"
+      }
+    },
+    {
+      "step": "spot: the coordinator seeds both pools from linked LP locks submitted through the relayer",
+      "ok": true,
+      "ms": 26590,
+      "detail": {
+        "pool1Shares": "3162277660167379",
+        "pool2Shares": "1414213562373095047801"
+      }
+    },
+    {
+      "step": "spot: the quote gives an executable estimate and price impact, rounded down, without the reserves",
+      "ok": true,
+      "ms": 4,
+      "detail": {
+        "amountOut": "9871000000000000000",
+        "priceImpactBps": 98,
+        "exact": "9871580343970612988"
+      }
+    },
+    {
+      "step": "spot: a swap fills against the private pool and pays a shielded note",
+      "ok": true,
+      "ms": 8937,
+      "detail": {
+        "out": "9871580343970612988",
+        "payout": "26dbc449"
+      }
+    },
+    {
+      "step": "spot: a two-hop swap settles through both pools atomically",
+      "ok": true,
+      "ms": 9929,
+      "detail": {
+        "out": "37506635701918876953",
+        "swaps": 2
+      }
+    },
+    {
+      "step": "spot: LP add then removal through a signed request pays out both tokens",
+      "ok": true,
+      "ms": 21201,
+      "detail": {
+        "shares": "1535086242800183",
+        "out0": "4999999999",
+        "out1": "471339410596540193801"
+      }
+    },
+    {
+      "step": "spot: an unfillable intent is left to expire with a logged reason and is then released to its owner",
+      "ok": true,
+      "ms": 8845,
+      "detail": {
+        "locksReleased": 1
+      }
+    },
+    {
+      "step": "spot: an ignored removal request returns to idle automatically (lp_set mode 1) with no key",
+      "ok": true,
+      "ms": 21043,
+      "detail": {
+        "idled": 1
+      }
+    },
+    {
+      "step": "spot failover: with the coordinator killed, risk workers take over by themselves using only their own keys",
+      "ok": true,
+      "ms": 79546,
+      "detail": {
+        "swap": "2812712659959271065",
+        "shares": "555045625567985141057",
+        "out0": "399999999999999999999",
+        "out1": "770232577342854128671",
+        "workerSwaps": 1,
+        "workerAdds": 1,
+        "workerRemovals": 1,
+        "workerReleases": 1
+      }
+    },
+    {
+      "step": "spot restart: the coordinator comes back with no state, recovers pool state from ciphertexts and executes the next swap",
+      "ok": true,
+      "ms": 9405,
+      "detail": {
+        "out": "2333507064154007294",
+        "coordinatorSwapsAfterRestart": 1
+      }
+    },
+    {
+      "step": "spot head race: an operator lands an earlier intent ahead of the coordinator, and the coordinator re-proves on the new head",
+      "ok": true,
+      "ms": 25553,
+      "detail": {
+        "reproved": 1,
+        "relayedOut": "837754268500029549",
+        "frontRunOut": "743648673767518505",
+        "thirdOut": "649905228626261205"
+      }
+    },
+    {
+      "step": "created market: picked up from MarketCreated, its bond covers a shortfall, and a worker returns the unused bond to the creator",
+      "ok": true,
+      "ms": 86494,
+      "detail": {
+        "bond": "20000000",
+        "used": "18200000",
+        "returned": "1800000",
+        "bondReleases": 1
+      }
+    },
+    {
+      "step": "relayer rebroadcast: a transaction dropped from the mempool is resent and confirmed",
+      "ok": true,
+      "ms": 4330,
+      "detail": {
+        "rebroadcasts": 1
+      }
+    },
+    {
+      "step": "a deep reorg rolls back the ledger, the tree, job status and all service views, and the chain continues",
+      "ok": true,
+      "ms": 15455,
+      "detail": {
+        "blocksRolledBack": "42",
+        "reorgs": 1,
+        "baselineRoot": "0x2efaef18fdd953d37d5d31958f61f4f2acde31ec8b75ffd3787290b362aae8c4",
+        "jobAfterReorg": "reorged"
+      }
+    },
+    {
+      "step": "a reorg deeper than the retained checkpoints is answered by a full rebuild from the deployment block",
+      "ok": true,
+      "ms": 12125,
+      "detail": {
+        "fullRebuilds": 1,
+        "deepestReorg": "398",
+        "root": "0x2ffcf5b494aaafe2d840c5e7e3f78dad44aecddfae09c7516391d2d423c0740b"
+      }
+    },
+    {
+      "step": "key rotation: services hold old and new keys across the change, an old position migrates forward and a new lock under the new keys is matched",
+      "ok": false,
+      "ms": 202772,
+      "detail": {
+        "error": "timeout waiting for the old position to migrate forward to the new keys"
+      }
+    }
+  ]
+}

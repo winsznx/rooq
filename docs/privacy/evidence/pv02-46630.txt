@@ -1,0 +1,13 @@
+chain 46630 verifier 0x665736d2b8be0AD287534244c49Fa36a5dFaA5Da code bytes 17786
+genuine:            true
+genuine gas est:    4116515
+flipped proof byte: Error: server returned an error response: error code 3: execution reverted, data: "0xeb73e0bd"
+flipped input:      Error: server returned an error response: error code 3: execution reverted, data: "0x9fc3a218"
+other circuit:      Error: server returned an error response: error code 3: execution reverted, data: "0x59895a5300000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000001f400000000000000000000000000000000000000000000000000000000000002540"
+deploy tx 0x8ce088777419ed7d87906d0fb85959ba12e468832f718a9228eec9dabcb19063
+
+Source verification, 2026-11-08 (benchmark verifier and its two linked libraries)
+sourcify HonkVerifier    0x665736d2b8be0AD287534244c49Fa36a5dFaA5Da  match (creation match, runtime match)
+sourcify RelationsLib    0xD536FAC792eBa2A3167508edD0726EF7Deea6F1e  match (runtime match, no creation match reported)
+sourcify ZKTranscriptLib 0x41900aa9FE72066B478B5D617e9E6ae432F69d52  match (runtime match, no creation match reported)
+blockscout RelationsLib and ZKTranscriptLib: "Fail - Unable to verify", cause not diagnosed. HonkVerifier not submitted to Blockscout.

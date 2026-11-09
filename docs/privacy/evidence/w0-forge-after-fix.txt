@@ -1,0 +1,198 @@
+No files changed, compilation skipped
+
+Ran 7 tests for test/ReviewFindings.t.sol:ReviewFindingsTest
+[PASS] test_adminCannotGrantWiredRoles() (gas: 25529)
+[PASS] test_fundingShortfallDoesNotDrawBackstop() (gas: 606219)
+[PASS] test_fundingWindowCappedAtOneHour() (gas: 500375)
+[PASS] test_guardianHoldBlocksPreflightReactivation() (gas: 251299)
+[PASS] test_partialReduceWithEmptyFreeBalanceTakesFeeFromMargin() (gas: 596570)
+[PASS] test_registeredFeedCannotBeOverwritten() (gas: 283880)
+[PASS] test_stalePartialReduceAtOffMarketPriceReverts() (gas: 490531)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 26.82ms (10.61ms CPU time)
+
+Ran 12 tests for test/LiquidationFunding.t.sol:LiquidationFundingTest
+[PASS] test_T005_fundingIndexIsTimingIndependent() (gas: 18680262)
+[PASS] test_T005_fundingTransfersAreZeroSum() (gas: 789212)
+[PASS] test_T006_exhaustedBackstopRecordsBadDebtAndForcesCloseOnly() (gas: 486096)
+[PASS] test_T007_healthyAccountCannotBeLiquidated() (gas: 457456)
+[PASS] test_T007_noLiquidationOnStaleOracle() (gas: 465735)
+[PASS] test_T007_thirdPartyLiquidatesUnhealthyLong() (gas: 548716)
+[PASS] test_creatorBondLockedWhileOpenInterestExists() (gas: 483823)
+[PASS] test_fundingRateIsCappedAndSigned() (gas: 446345)
+[PASS] test_liquidationGapUsesInsuranceThenBondThenRecordsBadDebt() (gas: 589260)
+[PASS] test_sameTimestampAccrualIsIdempotent() (gas: 497018)
+[PASS] test_staleOracleFreezesFundingInsteadOfFabricating() (gas: 448137)
+[PASS] test_unhealthyMakerSideCanBeLiquidated() (gas: 508462)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 32.61ms (16.68ms CPU time)
+
+Ran 3 tests for test/W0SourceConcerns.t.sol:W0SourceConcernsTest
+[PASS] test_defaultAdminCannotReachLockedRole() (gas: 29953)
+[PASS] test_fundingSettledReportsPaidSeparatelyFromOwed() (gas: 643538)
+[PASS] test_fundingShortfallIsWrittenOffAtClose() (gas: 691432)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 3.45ms (1.72ms CPU time)
+
+Ran 25 tests for test/ClearingHouse.t.sol:ClearingHouseTest
+[PASS] test_T003_longCreatesExactlyOppositeMakerExposure() (gas: 456393)
+[PASS] test_T003_shortTakerMakesMakerLong() (gas: 454049)
+[PASS] test_T004_closeAtLossCreditsMaker() (gas: 475669)
+[PASS] test_T004_closeAtProfitTransfersExactlyFromMaker() (gas: 483604)
+[PASS] test_T008_partialReduceRealisesProportionalPnlAndKeepsExposureMatched() (gas: 584003)
+[PASS] test_T011_staleOracleBlocksIncreaseButAllowsBackedClose() (gas: 491088)
+[PASS] test_T011_staleOracleTriggersPermissionlessCloseOnly() (gas: 91337)
+[PASS] test_T013_protocolFeesClaimedOnce() (gas: 455023)
+[PASS] test_T014_pausingOneMarketDoesNotFreezeAnother() (gas: 4025266)
+[PASS] test_closeOnlyBlocksOpenAllowsClose() (gas: 485508)
+[PASS] test_differentMakerCannotIncreaseExistingPair() (gas: 601568)
+[PASS] test_flipInOneTradeIsRejected() (gas: 453211)
+[PASS] test_guardianCannotReactivate() (gas: 53274)
+[PASS] test_increaseRecalculatesWeightedEntry() (gas: 552878)
+[PASS] test_makerCapacityExhausted() (gas: 385165)
+[PASS] test_maxFeeBound() (gas: 129200)
+[PASS] test_maxOpenInterestEnforced() (gas: 344254)
+[PASS] test_overLeverageRejected() (gas: 377982)
+[PASS] test_pausedBlocksEverythingButVaultWithdrawals() (gas: 516259)
+[PASS] test_quotePriceOutsideOracleBandRejected() (gas: 153991)
+[PASS] test_removeMarginRespectsInitialMargin() (gas: 505620)
+[PASS] test_selfTradeRejected() (gas: 75859)
+[PASS] test_settlementPendingAllowsPermissionlessExitAtMark() (gas: 448479)
+[PASS] test_takerLimitPriceProtectsAgainstWorseQuote() (gas: 129040)
+[PASS] test_triggerCloseOnlyRevertsWhenFeedHealthy() (gas: 73356)
+Suite result: ok. 25 passed; 0 failed; 0 skipped; finished in 37.16ms (22.69ms CPU time)
+
+Ran 16 tests for test/Spot.t.sol:SpotTest
+[PASS] testFuzz_swapNeverDecreasesK(uint96,bool) (runs: 512, μ: 110876, ~: 119179)
+[PASS] test_deadlineEnforced() (gas: 19715)
+[PASS] test_duplicatePoolRejected() (gas: 21352)
+[PASS] test_feeOnTransferTokenRejected() (gas: 2640230)
+[PASS] test_firstDepositLocksMinimumLiquidity() (gas: 17622)
+[PASS] test_firstDepositorDonationCannotInflateShares() (gas: 2959390)
+[PASS] test_guardianPauseBlocksSwapsButNotWithdrawals() (gas: 107209)
+[PASS] test_identicalTokensRejected() (gas: 11426)
+[PASS] test_minOutputEnforced() (gas: 29309)
+[PASS] test_proportionalLpSharesAndExactWithdraw() (gas: 209848)
+[PASS] test_reentrancyFromTokenCallbackBlocked() (gas: 2778948)
+[PASS] test_routerSingleHopSwap() (gas: 172380)
+[PASS] test_swapExactInMatchesQuoteAndKeepsInvariant() (gas: 123346)
+[PASS] test_unknownTokenRejected() (gas: 19670)
+[PASS] test_unsupportedFeeTierRejected() (gas: 547462)
+[PASS] test_zeroOutputRejected() (gas: 26365)
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 83.68ms (70.48ms CPU time)
+
+Ran 10 tests for test/MarginVault.t.sol:MarginVaultTest
+[PASS] testFuzz_T001_depositWithdrawSequence(uint96,uint96,uint96) (runs: 512, μ: 165025, ~: 165685)
+[PASS] test_T001_depositWithdrawConservesTokenUnits() (gas: 86410)
+[PASS] test_T002_cannotWithdrawMoreThanFree() (gas: 94014)
+[PASS] test_T002_makerCommittedBackingCannotDropBelowMinimumWhileActive() (gas: 153923)
+[PASS] test_T002_marginLockedInPositionIsNotWithdrawable() (gas: 520834)
+[PASS] test_donationDoesNotCreateLedgerCredit() (gas: 37496)
+[PASS] test_feeOnTransferCollateralIsRejected() (gas: 1146090)
+[PASS] test_onlyWiredOperatorsCanMoveLedger() (gas: 94885)
+[PASS] test_operatorsCanOnlyBeWiredOnce() (gas: 10858)
+[PASS] test_rejectsCollateralAbove18Decimals() (gas: 595412)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 89.76ms (73.75ms CPU time)
+
+Ran 12 tests for test/Preflight.t.sol:PreflightTest
+[PASS] test_T012_creatorCannotSelectTierOutsideGlobalBounds() (gas: 1649161)
+[PASS] test_activationRechecksLiveFeedState() (gas: 2339050)
+[PASS] test_duplicateMarketRejected() (gas: 27137)
+[PASS] test_eoaAsAssetRejected() (gas: 18441)
+[PASS] test_existingMarketIsActive() (gas: 122053)
+[PASS] test_feedForAnotherAssetCannotBeAttached() (gas: 1627336)
+[PASS] test_marketIdIsDeterministic() (gas: 12719)
+[PASS] test_memeWithoutFeedLaunchesSpotOnlyAndPerpsAreBlockedOnchain() (gas: 1944473)
+[PASS] test_needsBackingUntilMakerCommits() (gas: 2386032)
+[PASS] test_onlyCreatorCanProposePerp() (gas: 1598896)
+[PASS] test_previewAssetBeforeAnyGasIsSpent() (gas: 118495)
+[PASS] test_unapprovedQuoteAssetRejected() (gas: 555318)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 78.81ms (1.84ms CPU time)
+
+Ran 7 tests for test/RiskParity.t.sol:RiskParityTest
+[PASS] test_T015_feeParity() (gas: 3501302)
+[PASS] test_T015_fundingParity() (gas: 7502970)
+[PASS] test_T015_lifecycleParity() (gas: 20931113)
+[PASS] test_T015_marginRequirementParity() (gas: 3506894)
+[PASS] test_T015_pnlParity() (gas: 6811814)
+[PASS] test_T015_spotParity() (gas: 9079158)
+[PASS] test_T015_weightedEntryParity() (gas: 2469446)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 112.68ms (140.75ms CPU time)
+
+Ran 13 tests for test/QuoteVerifier.t.sol:QuoteVerifierTest
+[PASS] testFuzz_T010_fillsNeverExceedSigned(uint64,uint64) (runs: 512, μ: 456600, ~: 443530)
+[PASS] test_T009_expiredQuoteReverts() (gas: 96398)
+[PASS] test_T009_replayOfFilledQuoteReverts() (gas: 450035)
+[PASS] test_T010_partialFillsCannotExceedSignedSize() (gas: 683613)
+[PASS] test_cancelledNonceCannotFill() (gas: 102871)
+[PASS] test_crossChainReplayFails() (gas: 105857)
+[PASS] test_delegatedSignerWorksAndRevocationIsImmediate() (gas: 467789)
+[PASS] test_fillDirectionMustMatchQuote() (gas: 73550)
+[PASS] test_nonceFloorInvalidatesOlderQuotes() (gas: 99553)
+[PASS] test_policyVersionMismatchReverts() (gas: 73857)
+[PASS] test_signatureForAnotherClearingHouseFails() (gas: 4838229)
+[PASS] test_tamperedQuoteFailsSignature() (gas: 85932)
+[PASS] test_wrongTakerReverts() (gas: 76453)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 118.48ms (107.04ms CPU time)
+
+Ran 3 tests for test/invariant/PerpInvariants.t.sol:PerpInvariantsTest
+[PASS] invariant_everyUnitAttributed() (runs: 128, calls: 8192, reverts: 0)
+
+╭-------------+---------------+-------+---------+----------╮
+| Contract    | Selector      | Calls | Reverts | Discards |
++==========================================================+
+| PerpHandler | deposit       | 1226  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | liquidate     | 1201  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | movePrice     | 1203  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | settleFunding | 1151  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | trade         | 1194  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | warp          | 1080  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | withdraw      | 1137  | 0       | 0        |
+╰-------------+---------------+-------+---------+----------╯
+
+[PASS] invariant_ledgerEqualsTokenBalance() (runs: 128, calls: 8192, reverts: 0)
+
+╭-------------+---------------+-------+---------+----------╮
+| Contract    | Selector      | Calls | Reverts | Discards |
++==========================================================+
+| PerpHandler | deposit       | 1226  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | liquidate     | 1201  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | movePrice     | 1203  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | settleFunding | 1151  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | trade         | 1194  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | warp          | 1080  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | withdraw      | 1137  | 0       | 0        |
+╰-------------+---------------+-------+---------+----------╯
+
+[PASS] invariant_openInterestMatchesPairs() (runs: 128, calls: 8192, reverts: 0)
+
+╭-------------+---------------+-------+---------+----------╮
+| Contract    | Selector      | Calls | Reverts | Discards |
++==========================================================+
+| PerpHandler | deposit       | 1226  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | liquidate     | 1201  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | movePrice     | 1203  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | settleFunding | 1151  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | trade         | 1194  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | warp          | 1080  | 0       | 0        |
+|-------------+---------------+-------+---------+----------|
+| PerpHandler | withdraw      | 1137  | 0       | 0        |
+╰-------------+---------------+-------+---------+----------╯
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 3.90s (7.95s CPU time)
+
+Ran 10 test suites in 3.92s (4.48s CPU time): 108 tests passed, 0 failed, 0 skipped (108 total tests)

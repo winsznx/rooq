@@ -1,0 +1,64 @@
+Live private flow on https://rooq.trade, Robinhood Chain testnet (46630), 2026-11-09. Real browser, wallet signature and browser proofs.
+
+--- live-flow.log
+== open account
+== shield
+   shielded 560 USDG
+   shielded 1 TSLA
+   shielded 1 AMZN
+   shielded 1 PLTR
+   shielded 1 NFLX
+   shielded 1 AMD
+== seed pools
+   rooq: lock proved in 45358 ms
+   rooq: lock proved in 930 ms
+LIVE FLOW FAILED: Error: timeout on Add liquidity:
+--- live-flow2.log
+== open account
+== seed pools
+   TSLA pool already seeded
+   rooq: lock proved in 22813 ms
+   rooq: lock proved in 952 ms
+   seeded AMZN
+   rooq: lock proved in 855 ms
+   rooq: lock proved in 863 ms
+   seeded PLTR
+LIVE FLOW FAILED: TimeoutError: locator.waitFor: Timeout 420000ms exceeded.
+--- live-flow3.log
+== open account
+== seed pools
+   TSLA pool already seeded
+   AMZN pool already seeded
+   PLTR pool already seeded
+   rooq: lock proved in 11142 ms
+   rooq: lock proved in 910 ms
+   seeded NFLX
+   rooq: lock proved in 833 ms
+   rooq: lock proved in 818 ms
+   seeded AMD
+== swap
+   rooq: lock proved in 899 ms
+   op "Swap": Trade0s agoConfirmedProveSendLandDoneConfirmed by the chain. Finality is shown separately.Ethereum settlement pending0xdf2b…fee7 Back to this screenClear (33155 ms)
+== open and close a perp
+LIVE FLOW FAILED: TimeoutError: locator.waitFor: Timeout 420000ms exceeded.
+--- live-flow4.log
+== open account
+== seed pools
+   TSLA pool already seeded
+   AMZN pool already seeded
+   PLTR pool already seeded
+   NFLX pool already seeded
+   AMD pool already seeded
+== open and close a perp
+   rooq: lock proved in 49089 ms
+   position open
+   rooq: close_pair proved in 1712 ms
+   op "Close long": Trade0s agoConfirmedProveSendLandDoneConfirmed by the chain. Finality is shown separately.Ethereum settlement pending0x1d19…a538 Back to this screenClear (15062 ms)
+== unshield through the relayer
+   rooq: spend proved in 1512 ms
+   op "Unshield": Funds movement0s agoConfirmedProveSendLandDoneConfirmed by the chain. Finality is shown separately.Ethereum settlement pending0xcc60…f7bc Back to this screenClear (15063 ms)
+console errors: 0
+LIVE FLOW COMPLETE
+
+Earlier partial runs stopped on script errors, not product errors: a wrong operation label, a pool amount above the deposited balance, and a missing re-sign after a page reload.
+Open pair tx 0x38db8b118ab339f1828bc6dee5ea8f64c2d18f98916d48c7bd2afa0c090cd446

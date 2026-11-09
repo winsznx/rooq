@@ -1,0 +1,235 @@
+{
+  "note": "Local anvil (31337), dedicated chain. INCOMPLETE W1 FIXTURE: free notes only. Synthetic test identities.",
+  "steps": [
+    {
+      "step": "dedicated local chain",
+      "ok": true,
+      "detail": {
+        "rpc": "http://127.0.0.1:8547",
+        "chainId": 31337
+      }
+    },
+    {
+      "step": "deploy ShieldedPool and verifiers (incomplete W1 fixture)",
+      "ok": true,
+      "detail": {
+        "pool": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+        "asset": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+        "deploymentId": "45799623641704588251190468234785271865182283635316487",
+        "spendVerifier": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+      }
+    },
+    {
+      "step": "alice shields 600 + 400 (public boundary: sender, asset, amount)",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "relayer processes deposits; SDK tree matches on-chain root",
+      "ok": true,
+      "detail": {
+        "root": "0x2fd6374bac1349b964aedaebc56e6b68e1a46208366ed26c65713532da138b67"
+      }
+    },
+    {
+      "step": "alice finds her deposits from seed + public events",
+      "ok": true,
+      "detail": {
+        "notes": 2
+      }
+    },
+    {
+      "step": "private transfer: no token transfer, no asset, no amount, no alice/bob address on chain",
+      "ok": true,
+      "detail": {
+        "events": [
+          "NullifiersSpent",
+          "NotesCreated"
+        ]
+      }
+    },
+    {
+      "step": "replaying the same spend is rejected",
+      "ok": true,
+      "detail": {
+        "replay": "NullifierSpent(bytes32 nullifier)"
+      }
+    },
+    {
+      "step": "bob finds exactly 700 by scanning ciphertexts",
+      "ok": true,
+      "detail": {
+        "values": [
+          "700000000"
+        ]
+      }
+    },
+    {
+      "step": "relayer cannot redirect the withdrawal (verifier rejects)",
+      "ok": true,
+      "detail": {
+        "redirected": "verifier:SumcheckFailed"
+      }
+    },
+    {
+      "step": "relayer cannot raise its fee (verifier rejects)",
+      "ok": true,
+      "detail": {
+        "feeBump": "verifier:SumcheckFailed"
+      }
+    },
+    {
+      "step": "unknown root is rejected",
+      "ok": true,
+      "detail": {
+        "fakeRoot": "UnknownRoot(bytes32 root)"
+      }
+    },
+    {
+      "step": "non-canonical nullifier encoding is rejected (no second nullifier slot)",
+      "ok": true,
+      "detail": {
+        "nonCanonical": "NotAFieldElement()"
+      }
+    },
+    {
+      "step": "a proof bound to this deployment is accepted here and rejected by another deployment",
+      "ok": true,
+      "detail": {
+        "home": null,
+        "crossDeploy": "verifier:SumcheckFailed"
+      }
+    },
+    {
+      "step": "bob receives 650 and the relayer 5; bob's EOA never sent a transaction",
+      "ok": true,
+      "detail": {
+        "received": "650000000",
+        "fee": "5000000"
+      }
+    },
+    {
+      "step": "a relayer is paid privately: its note arrives and no token moves or asset appears on chain",
+      "ok": true,
+      "detail": {
+        "relayerNote": "1000000"
+      }
+    },
+    {
+      "step": "fresh wallets restored from seeds see alice 300 and bob 44",
+      "ok": true,
+      "detail": {
+        "alice": "300000000",
+        "bob": "44000000"
+      }
+    },
+    {
+      "step": "custody equals all unspent notes (345)",
+      "ok": true,
+      "detail": {
+        "custody": "345000000"
+      }
+    }
+  ],
+  "observer": [
+    {
+      "tx": "0x5ede775abd85407f90f6b6f2d40db8880753afd19b0bb58da9ffb77229e557c9",
+      "action": "shield",
+      "visible": {
+        "from": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "asset": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+        "amount": "600000000",
+        "inner": "random-looking field element",
+        "events": [
+          "Shielded"
+        ]
+      }
+    },
+    {
+      "tx": "0xbc49ce89c9d38ad1a209192e1a9897d0e070afaee116d2075bf15f307e0608ea",
+      "action": "shield",
+      "visible": {
+        "from": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "asset": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+        "amount": "400000000",
+        "inner": "random-looking field element",
+        "events": [
+          "Shielded"
+        ]
+      }
+    },
+    {
+      "tx": "0xb380e187159187db11812d59e841a7addb5329e2069d2daec0c315be1d4ec59a",
+      "action": "processQueue",
+      "visible": {
+        "leaves": 2,
+        "newRoot": "0x2fd6374bac1349b964aedaebc56e6b68e1a46208366ed26c65713532da138b67",
+        "gasUsed": "3963215",
+        "proveMs": 974
+      }
+    },
+    {
+      "tx": "0x905dbf4b50c9b4aaeccbc10e908c323c4012b2f10c467b9ff20d831b550cab73",
+      "action": "private transfer",
+      "visible": {
+        "sender": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+        "events": [
+          "NullifiersSpent",
+          "NotesCreated"
+        ],
+        "tokenTransfers": 0,
+        "publicAsset": "0x0000000000000000000000000000000000000000",
+        "withdrawAmount": "0",
+        "gasUsed": "3917896",
+        "proveMs": 424
+      }
+    },
+    {
+      "tx": "0xf481e06baae2ca30c5ef1f1ab6eae269a0efb9d881409bd4c2d1fb66b7f464cd",
+      "action": "processQueue",
+      "visible": {
+        "leaves": 3,
+        "newRoot": "0x06081a65b10062eb500cc28e238be3a90dcc46818a0224b9b02c2cf31ef75563",
+        "gasUsed": "3955833",
+        "proveMs": 980
+      }
+    },
+    {
+      "tx": "0x730cd44ab4abf23fce849e6d41bb642c8dec1926f974a86c580cd4fad17edab8",
+      "action": "unshield",
+      "visible": {
+        "sender": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+        "asset": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+        "recipient": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        "amount": "650000000",
+        "relayerFee": "5000000",
+        "events": [
+          "NullifiersSpent",
+          "NotesCreated",
+          "Unshielded"
+        ],
+        "gasUsed": "3983267"
+      }
+    },
+    {
+      "tx": "0xb55fd82d5dbc9383029853dfa5ae4325192f601b088aabf1d3f5d938571b82c4",
+      "action": "processQueue",
+      "visible": {
+        "leaves": 3,
+        "newRoot": "0x1940cdfc8257673f55f746a91085b86c48bcb00b3591b060846624a5f0cc1e49",
+        "gasUsed": "3955929",
+        "proveMs": 784
+      }
+    },
+    {
+      "tx": "0x256769d0ef6aa9d18c1b059cd0589296180e950c2c77763a56f26608ab6a3db8",
+      "action": "processQueue",
+      "visible": {
+        "leaves": 3,
+        "newRoot": "0x19a52d50086d6f712c02a8a8b2abb3fe422178f96687b3ac57cc735fe2682d91",
+        "gasUsed": "3955905",
+        "proveMs": 727
+      }
+    }
+  ]
+}

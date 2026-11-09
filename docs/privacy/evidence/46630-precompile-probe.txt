@@ -1,0 +1,13 @@
+Read-only eth_call probe of precompiles on Robinhood Chain testnet, 2026-11-08.
+RPC https://rpc.testnet.chain.robinhood.com, chainId 46630, latest block 150333298, block gasLimit 1125899906842624.
+G = (1, 2), the BN254 G1 generator. Commands: `cast call 0x...0N <input> --rpc-url $RPC`.
+
+0x06 ecAdd(G, G)  -> 0x030644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd315ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4  (= 2G, correct)
+0x07 ecMul(G, 2)  -> same value as above (correct, agrees with ecAdd)
+0x08 ecPairing(empty input) -> 0x...01 (correct per EIP-197)
+0x05 modexp 3^2 mod 5 -> 0x04 (correct)
+0x02 sha256("") -> 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (correct)
+
+What this shows: the arithmetic precompiles a BN254 Groth16 or UltraHonk Solidity verifier needs exist on 46630
+and answer correctly for these inputs. It does not show that a real proof verifies, what verification costs in
+gas, or that a non-trivial pairing succeeds. Those are the funded PV-02 / ADR-P03 experiment.

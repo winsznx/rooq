@@ -1,0 +1,55 @@
+Linux launcher test, 2026-11-09. Mac host, colima Docker, arm64 Debian 12 containers with systemd as PID 1. Throwaway keys on a disposable anvil fork of chain 46630 (127.0.0.1:8590); nothing sent to testnet.
+
+--- os: Debian GNU/Linux 12 (bookworm) aarch64 systemd systemd 252 (252.39-1~deb12u2)
+--- env file modes
+      1 600 root /etc/rooq/common.env
+      1 600 root /etc/rooq/coordinator.env
+      1 600 root /etc/rooq/maker.env
+      1 600 root /etc/rooq/price-relay.env
+      1 600 root /etc/rooq/queue.env
+      1 600 root /etc/rooq/read-api.env
+      1 600 root /etc/rooq/relayer.env
+      1 600 root /etc/rooq/risk-a.env
+      1 600 root /etc/rooq/risk-b.env
+700 /etc/rooq
+--- running unit users
+read-api pid=450 uid=64421 cmd=/opt/rooq/tools/bin/bun run src/services
+relayer pid=451 uid=64421 cmd=/opt/rooq/tools/bin/bun run src/services
+queue pid=452 uid=64421 cmd=/opt/rooq/tools/bin/bun run src/services
+coordinator pid=453 uid=64421 cmd=/opt/rooq/tools/bin/bun run src/services
+risk-a pid=454 uid=64421 cmd=/opt/rooq/tools/bin/bun run src/services
+risk-b pid=455 uid=64421 cmd=/opt/rooq/tools/bin/bun run src/services
+maker pid=456 uid=64421 cmd=/opt/rooq/tools/bin/bun run src/services
+price-relay pid=457 uid=64421 cmd=/opt/rooq/tools/bin/bun run src/services
+--- service user cannot read another service's secrets
+/usr/bin/cat: /etc/rooq/risk-a.env: Permission denied
+--- only loopback ports bound
+--- secrets in logs (expect 0)
+160 /tmp/all.log
+secret_values_found_in_journal=0
+--- rotation vars
+risk-a keys {'keysHeld': 2, 'currentKeyHeld': True, 'retiredKeyRecords': 0, 'unreadableRecords': 0}
+coordinator keys {'keysHeld': 2, 'currentKeyHeld': True, 'retiredKeyRecords': 0, 'unreadableRecords': 0}
+--- read api markets, tier B and funding
+{'market': '1', 'imrWad': '500000000000000000', 'mmrWad': '350000000000000000', 'takerFeeBps': '6', 'penaltyBps': '100', 'maxOiUsdWad': '100000000000000000000000', 'maxFundingPerHourWad': '100000000000000', 'mark': '354275000000000000000', 'markFresh': True} epochs 2
+{'market': '5', 'imrWad': '500000000000000000', 'mmrWad': '350000000000000000', 'takerFeeBps': '6', 'penaltyBps': '100', 'maxOiUsdWad': '100000000000000000000000', 'maxFundingPerHourWad': '100000000000000', 'mark': '442600000000000000000', 'markFresh': True} epochs 1
+--- risk worker funding proofs
+13
+risk-a counters {'epochs': 4, 'reproved': 3} lastAction {'action': 'epochs', 'at': '2026-11-09T01:28:23.235Z', 'tx': '0x9cba1036c28a753042484c118ad3464169846ce2876b18e42cf078612bc16eb9'}
+--- relay
+TEST relay of api.robinhood.com/rhj/prices
+Single-operator TEST relay. It isn't an independent oracle.
+{'prices_written': 12, 'skip_invalid': 3} None
+[{'symbol': 'TSLA', 'market': '1', 'answer8': '35427500000', 'ageSeconds': 43, 'fresh': True, 'lastSkip': None}, {'symbol': 'AMZN', 'market': '2', 'answer8': '25931000000', 'ageSeconds': 2, 'fresh': True, 'lastSkip': None}, {'symbol': 'PLTR', 'market': '3', 'answer8': '16021500000', 'ageSeconds': 12, 'fresh': True, 'lastSkip': None}, {'symbol': 'NFLX', 'market': '4', 'answer8': '6375000000', 'ageSeconds': 12, 'fresh': True, 'lastSkip': None}, {'symbol': 'AMD', 'market': '5', 'answer8': '44260000000', 'ageSeconds': 1, 'fresh': True, 'lastSkip': None}, {'symbol': 'TSLA', 'market': None, 'answer8': '35427500000', 'ageSeconds': 42, 'fresh': True, 'lastSkip': None}]
+--- CORS
+Access-Control-Allow-Origin: https://app.rooq.test
+0
+--- restart on failure
+killed 452
+
+--- after fix: one transient uid per unit (read-api 64071, queue 61377, risk-a 64627)
+--- kill -9 rooq@queue: NRestarts=1, active again
+--- update path: second install-release flipped /opt/rooq/current and restarted all units, 7/7 healthy
+--- Caddy, TLS internal CA, HTTPS: read 200, relayer 200, CORS allowed for the configured origin only; listeners 8760-8767 are all loopback
+--- second host: ROOQ_ONLY=risk-a installed one unit, healthy; disabled on first host
+--- maker: runs, health 200, blocked INSUFFICIENT_SHIELDED_BALANCE because no shielded wallet was funded; not funded in this test

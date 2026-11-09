@@ -1,0 +1,29 @@
+Compiling 1 files with Solc 0.8.28
+Solc 0.8.28 finished in 9.52s
+Compiler run successful!
+
+Ran 3 tests for test/W0SourceConcerns.t.sol:W0SourceConcernsTest
+[FAIL: LOCKED_ROLE must administer itself: 0x0000000000000000000000000000000000000000000000000000000000000000 != 0x406deb42f51ec136e081c77c3367e678b1124cefc40f8f174579598764c74ead] test_defaultAdminCannotReachLockedRole() (gas: 19507)
+[FAIL: FundingSettled(owed, paid) emitted] test_fundingSettledReportsPaidSeparatelyFromOwed() (gas: 702519)
+[PASS] test_fundingShortfallIsWrittenOffAtClose() (gas: 691152)
+Suite result: FAILED. 1 passed; 2 failed; 0 skipped; finished in 20.56ms (11.87ms CPU time)
+
+Ran 1 test suite in 36.61ms (20.56ms CPU time): 1 tests passed, 2 failed, 0 skipped (3 total tests)
+
+Failing tests:
+Encountered 2 failing tests in test/W0SourceConcerns.t.sol:W0SourceConcernsTest
+[FAIL: LOCKED_ROLE must administer itself: 0x0000000000000000000000000000000000000000000000000000000000000000 != 0x406deb42f51ec136e081c77c3367e678b1124cefc40f8f174579598764c74ead] test_defaultAdminCannotReachLockedRole() (gas: 19507)
+[FAIL: FundingSettled(owed, paid) emitted] test_fundingSettledReportsPaidSeparatelyFromOwed() (gas: 702519)
+
+Encountered a total of 2 failing tests, 1 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 2 failed tests
+Compiling 1 files with Solc 0.8.28
+Solc 0.8.28 finished in 8.86s
+Compiler run successful!
+
+Ran 1 test for test/W0Exploit.t.sol:W0ExploitTest
+[PASS] test_exploit_adminGrantsPreflightViaLockedRole() (gas: 74005)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.80ms (110.92µs CPU time)
+
+Ran 1 test suite in 11.78ms (3.80ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

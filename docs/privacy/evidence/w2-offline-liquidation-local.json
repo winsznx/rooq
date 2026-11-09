@@ -1,0 +1,882 @@
+{
+  "note": "Local anvil (31337). Perp lifecycle candidate: no spot or LP. Synthetic identities.",
+  "steps": [
+    {
+      "step": "dedicated local chain",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "deploy PrivatePairs with two risk keys and a coordinator key fixed at construction",
+      "ok": true,
+      "detail": {
+        "pool": "0x9E545E3C0baAB3E08CdfD552C960A1050f373042"
+      }
+    },
+    {
+      "step": "alice and the maker shield; queue processed permissionlessly",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "both wallets find their deposits",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "coordinator cannot change the taker's committed size",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: lock not in tree"
+      }
+    },
+    {
+      "step": "fill beyond the taker's limit price cannot be proven",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: fill above taker limit"
+      }
+    },
+    {
+      "step": "maker below initial margin cannot be proven",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: maker below initial margin"
+      }
+    },
+    {
+      "step": "position encrypted to a coordinator-chosen risk key is rejected by the verifier (LIQ-04)",
+      "ok": true,
+      "detail": {
+        "rogueResult": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "garbled risk ciphertext is rejected by the verifier (REC-01)",
+      "ok": true,
+      "detail": {
+        "garbledResult": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "pair opens at mark 250 + 20 bps with no trader online",
+      "ok": true,
+      "detail": {
+        "entry": "250500000000000000000"
+      }
+    },
+    {
+      "step": "both risk workers independently decrypt the pair from chain data",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "taker and maker each read the pair with their one-time key",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "the pair holds one-time addresses, not either wallet's main key (D-06)",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a key that is not a risk key discovers nothing",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "the reference model says the pair is healthy at 250",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "healthy pair cannot be liquidated (no proof exists)",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: pair is healthy"
+      }
+    },
+    {
+      "step": "proof at a cherry-picked earlier price is rejected",
+      "ok": true,
+      "detail": {
+        "oldResult": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "liquidatable at 218 per reference model",
+      "ok": true,
+      "detail": {
+        "takerBad": true,
+        "makerBad": false,
+        "takerOut": "11280000",
+        "makerOut": "250000000",
+        "penalty": "8720000",
+        "reward": "4360000",
+        "toInsurance": "4360000",
+        "claim": "0",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "unknown market is rejected",
+      "ok": true,
+      "detail": {
+        "unknownMarket": "UnknownMarket(uint256 market)"
+      }
+    },
+    {
+      "step": "a proof for one market is rejected on another live market at the same price (LIQ-03)",
+      "ok": true,
+      "detail": {
+        "wrongMarket": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "changing the reward note is rejected by the verifier",
+      "ok": true,
+      "detail": {
+        "frontRun": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "changing the hidden insurance change is rejected by the verifier",
+      "ok": true,
+      "detail": {
+        "bumped": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "worker A liquidates with both traders offline; no public token movement (D-07)",
+      "ok": true,
+      "detail": {
+        "reward": "4360000"
+      }
+    },
+    {
+      "step": "worker A's reward arrives as a shielded note",
+      "ok": true,
+      "detail": {
+        "value": "4360000"
+      }
+    },
+    {
+      "step": "second worker's proof for the same pair is rejected (shared nullifier)",
+      "ok": true,
+      "detail": {
+        "duplicate": "NullifierSpent(bytes32 nullifier)"
+      }
+    },
+    {
+      "step": "a liquidation publishes no reward, insurance or payout amount (D-07)",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "offline owners recover forced outputs from seed and chain data (REC-02)",
+      "ok": true,
+      "detail": {
+        "takerOut": "11280000",
+        "makerOut": "250000000"
+      }
+    },
+    {
+      "step": "short taker pair opens at mark 200 - 20 bps",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "loss beyond margin becomes a claim for the winner",
+      "ok": true,
+      "detail": {
+        "takerBad": true,
+        "makerBad": false,
+        "takerOut": "0",
+        "makerOut": "105000000",
+        "penalty": "0",
+        "reward": "0",
+        "toInsurance": "0",
+        "claim": "35800000",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "worker B force-closes the short (failover path)",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "maker is the unhealthy side at 108",
+      "ok": true,
+      "detail": {
+        "takerBad": false,
+        "makerBad": true,
+        "takerOut": "139000000",
+        "makerOut": "10600000",
+        "penalty": "5400000",
+        "reward": "2700000",
+        "toInsurance": "2700000",
+        "claim": "0",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "maker side liquidated; taker receives margin plus gain",
+      "ok": true,
+      "detail": {
+        "takerOut": "139000000"
+      }
+    },
+    {
+      "step": "an unexpired lock cannot be released",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: lock not expired"
+      }
+    },
+    {
+      "step": "an expired lock cannot be matched",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: taker lock expired"
+      }
+    },
+    {
+      "step": "the owner reads its own lock from chain data without the coordinator",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "release with a future timestamp is rejected",
+      "ok": true,
+      "detail": {
+        "future": "StaleAsOf(uint256 asOf, uint256 timestamp)"
+      }
+    },
+    {
+      "step": "expired lock refunded to its offline owner",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "three liquidated pairs fold back to zero open interest",
+      "ok": true,
+      "detail": {
+        "folded": "0x0000000000000000000000000000000000000000000000000000000000000006"
+      }
+    },
+    {
+      "step": "insurance pays the shortfall pro rata and the rest stays private bad debt",
+      "ok": true,
+      "detail": {
+        "ratio": "197206703910614525",
+        "paid": "7059999",
+        "badDebt": "28740001"
+      }
+    },
+    {
+      "step": "the winner reads its claim with its one-time key",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a claim cannot be redeemed at a better ratio than its epoch's",
+      "ok": true,
+      "detail": {
+        "greedyResult": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "a claim is paid once, to its owner, from chain data alone",
+      "ok": true,
+      "detail": {
+        "paid": "7059999",
+        "twice": "NullifierSpent(bytes32 nullifier)"
+      }
+    },
+    {
+      "step": "a worker cannot claim different open interest",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: head mismatch"
+      }
+    },
+    {
+      "step": "a position opens with the current funding index as its snapshot",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "the new position does not earn funding for the epoch it was folded in",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a one-sided market accrues the capped hour at the full rate",
+      "ok": true,
+      "detail": {
+        "mag": "4999999999999680000"
+      }
+    },
+    {
+      "step": "a changed funding index is rejected by the verifier",
+      "ok": true,
+      "detail": {
+        "tampered": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "funding owed matches an independent computation and exceeds the taker's margin",
+      "ok": true,
+      "detail": {
+        "owed": "45000000"
+      }
+    },
+    {
+      "step": "a winning payer's gain is netted against its unpaid funding (D-03)",
+      "ok": true,
+      "detail": {
+        "gain": "2400000",
+        "netted": "2400000",
+        "writtenOff": "11600000"
+      }
+    },
+    {
+      "step": "the funding receiver is paid from chain data alone",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "only the taker's key can use the taker close",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: not the taker"
+      }
+    },
+    {
+      "step": "an underwater pair cannot use the taker close; liquidation governs",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: underwater pair cannot close"
+      }
+    },
+    {
+      "step": "a close proved at another price is rejected by the verifier",
+      "ok": true,
+      "detail": {
+        "oldMarkResult": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "taker close fills at the mark less the maker's committed spread",
+      "ok": true,
+      "detail": {
+        "fill": "109670000000000000000",
+        "takerOut": "69940000",
+        "makerOut": "41060000",
+        "fee": "0",
+        "shortPaid": "0",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "taker closes with the maker offline and both are paid",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "nobody without an owner key can request an exit, so no one can grief a position",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: not an owner of this pair"
+      }
+    },
+    {
+      "step": "an update cannot silently drop a pending exit",
+      "ok": true,
+      "detail": {
+        "droppedResult": "ExitNotCarried(bytes32 nullifier)"
+      }
+    },
+    {
+      "step": "a funding settlement keeps the exit's original deadline",
+      "ok": true,
+      "detail": {
+        "matureAfter": "1794804694"
+      }
+    },
+    {
+      "step": "a forced close before the delay is refused",
+      "ok": true,
+      "detail": {
+        "notMature": "ExitNotMature(bytes32 nullifier)"
+      }
+    },
+    {
+      "step": "forced exit settles at the mark with no spread",
+      "ok": true,
+      "detail": {
+        "fill": "90000000000000000000",
+        "takerOut": "71780000",
+        "makerOut": "40220000",
+        "fee": "0",
+        "shortPaid": "0",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "a maker exits a position whose taker has gone away",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "settling at entry is refused while the oracle is alive",
+      "ok": true,
+      "detail": {
+        "liveOracle": "OracleNotDead(uint256 market)"
+      }
+    },
+    {
+      "step": "with the oracle down, a forced close at a mark is refused",
+      "ok": true,
+      "detail": {
+        "staleResult": "OracleUnavailable(uint256 market)"
+      }
+    },
+    {
+      "step": "a dead oracle settles the pair at its entry price, each side keeping its margin",
+      "ok": true,
+      "detail": {
+        "fill": "110220000000000000000",
+        "takerOut": "53000000",
+        "makerOut": "60000000",
+        "fee": "0",
+        "shortPaid": "0",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "both exit bonds are refundable after their pairs close",
+      "ok": true,
+      "detail": {
+        "bonds": "2000000000000000"
+      }
+    },
+    {
+      "step": "an open past the market's open interest limit cannot be proven",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: open interest limit"
+      }
+    },
+    {
+      "step": "an open above the market's size limit cannot be proven",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: size above market maximum"
+      }
+    },
+    {
+      "step": "a proof against a different limit than the contract's is rejected by the verifier",
+      "ok": true,
+      "detail": {
+        "wrongLimitResult": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "the open fee is the fill notional at 10 bps",
+      "ok": true,
+      "detail": {
+        "fee": "200400"
+      }
+    },
+    {
+      "step": "without an owner key an update can only settle funding",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: no key: funding only"
+      }
+    },
+    {
+      "step": "the taker adds margin from a shielded note and keeps the change",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "margin cannot be removed below initial margin",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: below initial margin"
+      }
+    },
+    {
+      "step": "the taker removes margin down to a healthy level",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a partial reduce realizes PnL on the reduced part and pays the fee",
+      "ok": true,
+      "detail": {
+        "size": "1000000000000000000",
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingDebt": "0",
+        "debtByTaker": "0",
+        "refused": null,
+        "takerMargin": "40159930",
+        "makerMargin": "50530000",
+        "fee": "109670"
+      }
+    },
+    {
+      "step": "the epoch folds the open, the partial reduce and the zero-size updates to the right open interest",
+      "ok": true,
+      "detail": {
+        "folded": "0x0000000000000000000000000000000000000000000000000000000000000004"
+      }
+    },
+    {
+      "step": "a worker with no owner key settles funding on an open pair",
+      "ok": true,
+      "detail": {
+        "size": "1000000000000000000",
+        "fundingOwed": "5500000",
+        "fundingPaid": "5500000",
+        "fundingNetted": "0",
+        "fundingDebt": "0",
+        "debtByTaker": "0",
+        "refused": null,
+        "takerMargin": "34659930",
+        "makerMargin": "56030000",
+        "fee": "0"
+      }
+    },
+    {
+      "step": "no funding is charged twice, and the close pays the fee",
+      "ok": true,
+      "detail": {
+        "fill": "109670000000000000000",
+        "takerOut": "44020260",
+        "makerOut": "46560000",
+        "fee": "109670",
+        "shortPaid": "0",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "fees reach the fee address as shielded notes",
+      "ok": true,
+      "detail": {
+        "fees": "419740"
+      }
+    },
+    {
+      "step": "a market is created by anyone, with its bond in custody",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a loss past margin in the new market becomes a claim for the winner",
+      "ok": true,
+      "detail": {
+        "takerBad": true,
+        "makerBad": false,
+        "takerOut": "0",
+        "makerOut": "24000000",
+        "penalty": "0",
+        "reward": "0",
+        "toInsurance": "0",
+        "claim": "18200000",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "with no insurance yet, the creator's bond pays the claim in full",
+      "ok": true,
+      "detail": {
+        "bondUsed": "18200000"
+      }
+    },
+    {
+      "step": "the winner is paid from the bond as a private note",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "the bond stays locked while the market is open",
+      "ok": true,
+      "detail": {
+        "earlyClose": "MarketStillOpen(uint256 market)"
+      }
+    },
+    {
+      "step": "only the creator can close the market",
+      "ok": true,
+      "detail": {
+        "notCreator": "NotCreator(uint256 market)"
+      }
+    },
+    {
+      "step": "the creator cannot claim less of the bond was used",
+      "ok": true,
+      "detail": {
+        "lied": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "the unused bond returns to the creator, and only the unused part",
+      "ok": true,
+      "detail": {
+        "returned": "1800000"
+      }
+    },
+    {
+      "step": "custody equals live notes + open locks + private insurance, with all positions closed",
+      "ok": true,
+      "detail": {
+        "custody": "2622200000",
+        "notes": "2572199999",
+        "lockedLive": "50000000",
+        "insurance": "1"
+      }
+    },
+    {
+      "step": "insurance cannot be swept while the market's oracle is alive",
+      "ok": true,
+      "detail": {
+        "tooEarly": "MarketNotWoundDown(uint256 market)"
+      }
+    },
+    {
+      "step": "a sweep cannot claim a different insurance balance",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "message": "Circuit execution failed: open positions or wrong record"
+      }
+    },
+    {
+      "step": "after 90 days dead, the insurance moves to the fee address and custody still balances",
+      "ok": true,
+      "detail": {
+        "swept": "1"
+      }
+    },
+    {
+      "step": "two positions open under the original keys",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "only the key guardian can schedule a rotation",
+      "ok": true,
+      "detail": {
+        "notGuardian": "NotKeyGuardian()"
+      }
+    },
+    {
+      "step": "a key that is not a curve point is refused before it can break liquidation",
+      "ok": true,
+      "detail": {
+        "offCurve": "KeyNotOnCurve(uint256 x, uint256 y)"
+      }
+    },
+    {
+      "step": "a rotation cannot take effect before its delay",
+      "ok": true,
+      "detail": {
+        "earlyActivate": "KeyRotationNotDue(uint256 activatesAt, uint256 timestamp)"
+      }
+    },
+    {
+      "step": "the schedule is public, delayed, and leaves the live keys unchanged",
+      "ok": true,
+      "detail": {
+        "activatesAt": "1804053612"
+      }
+    },
+    {
+      "step": "during the delay a new lock still uses the current keys and lands",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "anyone activates after the delay and the new keys are in effect",
+      "ok": true,
+      "detail": {
+        "epoch": "1"
+      }
+    },
+    {
+      "step": "a retired key can never be scheduled again",
+      "ok": true,
+      "detail": {
+        "retired": "KeyReused(uint256 x, uint256 y)"
+      }
+    },
+    {
+      "step": "a lock encrypted to a retired key is rejected by the verifier after the transition",
+      "ok": true,
+      "detail": {
+        "retiredLock": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "the first epoch after rotation folds records opened under the old keys and moves market state to the new keys",
+      "ok": true,
+      "detail": {
+        "longOi": "3000000000000000000"
+      }
+    },
+    {
+      "step": "a new lock under the new keys is not readable with the retired coordinator key",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a position opened after rotation is readable with the new risk key and not with the retired one",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a lock made under the retired coordinator key is still matched by the holder of that key, into a position under the new risk keys",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a position opened under old keys is readable with the retired key and not with the new one",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "the reference model says the old position is liquidatable at 65",
+      "ok": true,
+      "detail": {
+        "takerBad": true,
+        "makerBad": false,
+        "takerOut": "0",
+        "makerOut": "130400000",
+        "penalty": "600000",
+        "reward": "300000",
+        "toInsurance": "300000",
+        "claim": "0",
+        "takerPaysFunding": false,
+        "fundingOwed": "0",
+        "fundingPaid": "0",
+        "fundingNetted": "0",
+        "fundingWrittenOff": "0"
+      }
+    },
+    {
+      "step": "a liquidation that claims the retired risk keys for its claim ciphertext is rejected by the verifier",
+      "ok": true,
+      "detail": {
+        "wrongKeyLiq": "verifier:0x9fc3a218"
+      }
+    },
+    {
+      "step": "the worker holding the retired key liquidates the old position; the reward arrives privately",
+      "ok": true,
+      "detail": {
+        "reward": "300000"
+      }
+    },
+    {
+      "step": "the claim from that liquidation is readable with the new risk key",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "step": "a keyless update moves an old position forward: the new key reads it, the retired key no longer does, and its value is unchanged",
+      "ok": true,
+      "detail": {
+        "takerMargin": "72000000",
+        "makerMargin": "60000000"
+      }
+    }
+  ],
+  "gas": {
+    "mintTo": "51408",
+    "approve": "46365",
+    "shield": "137659",
+    "processQueue": "3955765",
+    "lock": "4140689",
+    "openPair": "4533724",
+    "setAnswer": "39110",
+    "liquidate": "4304032",
+    "release": "3768073",
+    "advanceFunding": "4006852",
+    "redeemClaim": "3785427",
+    "closePair": "4123549",
+    "requestExit": "3468897",
+    "updatePair": "4517497",
+    "withdrawBond": "30953",
+    "createMarket": "488699",
+    "closeToNewPositions": "50253",
+    "releaseBond": "3210582",
+    "sweepInsurance": "3917516",
+    "scheduleKeyRotation": "206332",
+    "activateKeyRotation": "264577"
+  },
+  "proveMs": {
+    "lock": 395,
+    "open_pair": 549,
+    "liquidate": 458,
+    "release": 202,
+    "redeem_claim": 186,
+    "funding_epoch": 389,
+    "close_pair": 322,
+    "exit_request": 114,
+    "pair_update": 602,
+    "insurance_sweep": 264
+  }
+}
