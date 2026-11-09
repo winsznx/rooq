@@ -1,0 +1,41 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+solc_version = "0.8.28"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+bytecode_hash = "none"
+# ClearingHouse sits near the 24,576-byte EIP-170 limit; it alone is optimized for size.
+additional_compiler_profiles = [{ name = "size", optimizer_runs = 200, via_ir = true }]
+compilation_restrictions = [{ paths = "src/perps/ClearingHouse.sol", via_ir = true }]
+fs_permissions = [
+  { access = "read", path = "./test/vectors" },
+  { access = "read", path = "../config" },
+  { access = "read-write", path = "./deployments" },
+]
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "forge-std/=lib/forge-std/src/",
+]
+
+[profile.default.fuzz]
+runs = 512
+seed = "0x726f6f71"
+
+[profile.default.invariant]
+runs = 128
+depth = 64
+fail_on_revert = false
+show_metrics = true
+
+[profile.ci.fuzz]
+runs = 4096
+
+[rpc_endpoints]
+rh_testnet = "https://rpc.testnet.chain.robinhood.com"
+local = "http://127.0.0.1:8545"
