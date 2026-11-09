@@ -1,0 +1,101 @@
+/* ROOQ working design tokens — same values as ROOQ_MASTER_PRD section 12. */
+:root {
+  color-scheme: light;
+  --rq-font-ui: "Instrument Sans", Arial, sans-serif;
+  --rq-font-data: "IBM Plex Mono", ui-monospace, monospace;
+  --rq-font-tabular: tabular-nums lining-nums;
+  --rq-canvas: #FFFFFF;
+  --rq-surface: #FFFFFF;
+  --rq-surface-raised: #F5F7F7;
+  --rq-surface-pressed: #EAF0F0;
+  --rq-ink: #0C0F10;
+  --rq-ink-secondary: #455054;
+  --rq-ink-tertiary: #6D7478;
+  --rq-line: #E2E7E8;
+  --rq-line-strong: #BEC7CA;
+  --rq-accent: #9B4D29;
+  --rq-accent-soft: #F6E9E1;
+  --rq-positive: #147A63;
+  --rq-negative: #B94151;
+  --rq-warning: #855400;
+  --rq-focus: #096B92;
+  --rq-chart-grid: #EDF0F1;
+  --rq-radius-tag: 4px;
+  --rq-radius-input: 8px;
+  --rq-radius-panel: 10px;
+  --rq-radius-large: 12px;
+  --rq-radius-status-pill: 999px;
+  --rq-space-4: 4px;
+  --rq-space-8: 8px;
+  --rq-space-12: 12px;
+  --rq-space-16: 16px;
+  --rq-space-20: 20px;
+  --rq-space-24: 24px;
+  --rq-space-32: 32px;
+  --rq-space-40: 40px;
+  --rq-space-48: 48px;
+  --rq-space-64: 64px;
+  --rq-space-80: 80px;
+  --rq-space-96: 96px;
+  --rq-layout-public-max-width: 1200px;
+  --rq-layout-article-max-width: 760px;
+  --rq-layout-app-rail: 224px;
+  --rq-layout-compact-rail: 64px;
+  --rq-layout-desktop-ticket: 344px;
+  --rq-layout-wide-ticket: 376px;
+  --rq-layout-header: 64px;
+  --rq-layout-mobile-header: 56px;
+  --rq-layout-bottom-tab-bar: 64px;
+  --rq-layout-chart-min-height: 360px;
+  --rq-layout-table-row: 52px;
+  --rq-layout-touch-min: 44px;
+  --rq-motion-hover: 120ms;
+  --rq-motion-standard: 180ms;
+  --rq-motion-dialog: 220ms;
+  --rq-motion-slow: 260ms;
+  --rq-type-hero-desktop: 76px;
+  --rq-type-hero-mobile: 43px;
+  --rq-type-page-title-desktop: 42px;
+  --rq-type-page-title-mobile: 30px;
+  --rq-type-section-title-desktop: 28px;
+  --rq-type-section-title-mobile: 24px;
+  --rq-type-panel-title-desktop: 18px;
+  --rq-type-panel-title-mobile: 17px;
+  --rq-type-body-desktop: 15px;
+  --rq-type-body-mobile: 15px;
+  --rq-type-body-small-desktop: 13px;
+  --rq-type-body-small-mobile: 13px;
+  --rq-type-table-desktop: 13px;
+  --rq-type-table-mobile: 13px;
+  --rq-type-label-desktop: 12px;
+  --rq-type-label-mobile: 12px;
+  --rq-type-eyebrow-desktop: 11px;
+  --rq-type-eyebrow-mobile: 11px;
+  --rq-type-trade-price-desktop: 34px;
+  --rq-type-trade-price-mobile: 28px;
+  --rq-type-button-desktop: 14px;
+  --rq-type-button-mobile: 14px;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --rq-canvas: #0C0F10;
+  --rq-surface: #141A1C;
+  --rq-surface-raised: #1D2527;
+  --rq-surface-pressed: #293235;
+  --rq-ink: #F6F8F8;
+  --rq-ink-secondary: #C3CBCC;
+  --rq-ink-tertiary: #A5ADAF;
+  --rq-line: #30393C;
+  --rq-line-strong: #506064;
+  --rq-accent: #E9A67E;
+  --rq-accent-soft: #35241D;
+  --rq-positive: #32B88F;
+  --rq-negative: #F08288;
+  --rq-warning: #E6BA5D;
+  --rq-focus: #7DCEE9;
+  --rq-chart-grid: #273033;
+}
+html, body { background:var(--rq-canvas);color:var(--rq-ink);font-family:var(--rq-font-ui); }
+.rq-data { font-family:var(--rq-font-data);font-variant-numeric: tabular-nums lining-nums; }
+*:focus-visible { outline:2px solid var(--rq-focus);outline-offset:3px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:0.01ms !important;transition-duration:0.01ms !important;scroll-behavior:auto !important; }}
