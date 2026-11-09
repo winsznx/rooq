@@ -1,0 +1,15 @@
+.page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 20px var(--rq-gutter) 48px; max-width: 1000px; }
+.title { margin: 0; font-size: 24px; font-weight: 400; letter-spacing: -0.02em; }
+.ledger { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rq-line); border-radius: var(--rq-radius-large); background: var(--rq-surface); padding: 2px 16px; }
+.ledger li + li { border-top: 1px solid var(--rq-line); }
+.entry summary::-webkit-details-marker { display: none; }
+.summary { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; padding: 10px 0; cursor: pointer; list-style: none; }
+.summaryText { display: grid; min-width: 0; }
+.summaryText span { font-size: 13px; color: var(--rq-ink-secondary); }
+.status { font-size: 12px; color: var(--rq-ink-secondary); text-align: right; }
+.summary svg { transition: transform var(--rq-t-select) var(--rq-ease); }
+.entry[open] .summary svg { transform: rotate(180deg); }
+.receipt { padding: 4px 0 16px; max-width: 520px; }
+@media (max-width: 480px) {
+  .status { grid-column: 1 / -1; text-align: left; }
+}

@@ -1,0 +1,87 @@
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  padding: 24px var(--rq-gutter) 48px;
+  max-width: 1280px;
+}
+.head {
+  display: grid;
+  gap: 8px;
+}
+.table {
+  display: none;
+}
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rq-line);
+}
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pair {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+@media (min-width: 768px) {
+  .table {
+    display: block;
+    padding: 4px 8px;
+    border: 1px solid var(--rq-line);
+    border-radius: var(--rq-radius-large);
+    background: var(--rq-surface);
+  }
+  .cards {
+    display: none;
+  }
+}
+.detail {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .detail {
+    grid-template-columns: minmax(0, 1fr) 400px;
+  }
+}
+.panelBody {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+.formula {
+  font-family: var(--rq-font-data-stack);
+  font-size: 13px;
+}
+
+.claim { display: grid; gap: 8px; padding: 16px 20px; border: 1px solid var(--rq-line); border-radius: var(--rq-radius-large); background: var(--rq-surface); }
+.claimValue { margin: 0; font-family: var(--rq-font-data-stack); font-variant-numeric: tabular-nums lining-nums; font-size: clamp(24px, 4vw, 36px); font-weight: 400; letter-spacing: -0.02em; }
+.composition { display: flex; gap: 3px; height: 8px; }
+.composition span:first-child { background: var(--rq-ink); border-radius: 4px; }
+.composition span:last-child { background: var(--rq-ink-tertiary); border-radius: 4px; }
+.compositionKey { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--rq-ink-secondary); }
+.panelSection { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (max-width: 1023px) {
+  .table th:nth-child(3),
+  .table td:nth-child(3),
+  .table th:nth-child(4),
+  .table td:nth-child(4),
+  .table th:nth-child(6),
+  .table td:nth-child(6) {
+    display: none;
+  }
+}

@@ -1,0 +1,28 @@
+.page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 20px var(--rq-gutter) 48px; max-width: 1200px; }
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.title { margin: 0; font-size: 24px; font-weight: 400; letter-spacing: -0.02em; }
+.lead { display: grid; gap: 16px; padding: 18px 20px; border: 1px solid var(--rq-line); border-radius: var(--rq-radius-large); background: var(--rq-surface); }
+.side { margin: 0; font-size: 15px; font-weight: 400; }
+.side[data-side="long"] { color: var(--rq-positive); }
+.side[data-side="short"] { color: var(--rq-negative); }
+.size { margin: 0; font-family: var(--rq-font-data-stack); font-variant-numeric: tabular-nums lining-nums; font-size: clamp(32px, 4.4vw, 52px); line-height: 1.05; letter-spacing: -0.02em; font-weight: 400; }
+.leadFacts { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.leadFacts dt { font-size: 12px; color: var(--rq-ink-tertiary); }
+.leadFacts dd { margin: 0; font-size: 15px; font-weight: 400; }
+.ladder { display: grid; gap: 10px; }
+.rail { position: relative; height: 18px; border-bottom: 1px solid var(--rq-line-strong); margin: 0 6px; }
+.stop { position: absolute; bottom: -1px; width: 2px; height: 16px; margin-left: -1px; background: var(--rq-ink); }
+.stop[data-tone="liq"] { background: var(--rq-negative); }
+.stop[data-tone="entry"] { background: var(--rq-accent); }
+.ladderKey { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 13px; color: var(--rq-ink-secondary); }
+.ladderKey span { display: inline-flex; align-items: center; gap: 6px; }
+.ladderKey i { display: inline-block; width: 8px; height: 2px; background: var(--rq-ink); }
+.ladderKey span[data-tone="liq"] i { background: var(--rq-negative); }
+.ladderKey span[data-tone="entry"] i { background: var(--rq-accent); }
+.ladderKey b { color: var(--rq-ink); font-weight: 500; }
+.note { margin: 0; font-size: 12px; color: var(--rq-ink-tertiary); }
+.section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.sectionTitle { margin: 0; font-size: 15px; font-weight: 400; padding-bottom: 6px; border-bottom: 1px solid var(--rq-line); }
+@media (min-width: 1024px) {
+  .lead { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: end; }
+}
