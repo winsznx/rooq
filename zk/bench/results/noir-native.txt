@@ -1,0 +1,11 @@
+RESULT op=transfer backend=bb-native-8t prove_s=0.25 peak_rss_mb=33
+RESULT op=transfer backend=bb-native-8t prove_s=0.22 peak_rss_mb=36
+RESULT op=transfer backend=bb-native-8t prove_s=0.23 peak_rss_mb=33
+RESULT op=transfer backend=bb-native-8t prove_s=0.22 peak_rss_mb=32
+RESULT op=transfer backend=bb-native-8t prove_s=0.23 peak_rss_mb=31
+RESULT op=perp_open backend=bb-native-8t prove_s=1.74 peak_rss_mb=336
+RESULT op=perp_open backend=bb-native-8t prove_s=1.47 peak_rss_mb=333
+RESULT op=perp_open backend=bb-native-8t prove_s=1.41 peak_rss_mb=340
+RESULT op=perp_open backend=bb-native-8t prove_s=1.62 peak_rss_mb=339
+RESULT op=perp_open backend=bb-native-8t prove_s=1.51 peak_rss_mb=334
+RESULT op=agg2 backend=bb-native-8t prove_s=9.69 peak_rss_mb=2294

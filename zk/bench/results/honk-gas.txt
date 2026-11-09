@@ -1,0 +1,9 @@
+[PASS] test_perpOpenProofVerifies() (gas: 2641462)
+  perp_open verify gas: 2621430
+  perp_open calldata bytes: 10240
+[PASS] test_proofForOtherCircuitRejected() (gas: 22135)
+[PASS] test_tamperedProofRejected() (gas: 6217858)
+[PASS] test_tamperedPublicInputRejected() (gas: 11254434)
+[PASS] test_transferProofVerifies() (gas: 2375178)
+  transfer verify gas: 2357967
+  transfer calldata bytes: 8352

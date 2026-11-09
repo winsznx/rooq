@@ -1,0 +1,20 @@
+rejected transfer: wrong spending key
+rejected transfer: inflate output value
+rejected transfer: forged nullifier
+rejected transfer: wrong root
+rejected transfer: other deployment
+rejected transfer: ciphertext for wrong key
+rejected perp: quote expired at batch time
+rejected perp: other chain domain separator
+rejected perp: changed policy version
+rejected perp: price changed after signing
+rejected perp: size changed after signing
+rejected perp: side flipped after signing
+rejected perp: taker margin below IMR
+rejected perp: maker margin below IMR
+rejected perp: oracle commitment for other epoch
+rejected perp: forged signature byte
+rejected perp: maker record nonce reused wrong
+rejected perp: risk ciphertext mismatch
+rejected perp: other risk key
+rejected=19 problems=0

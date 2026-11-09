@@ -1,0 +1,6 @@
+chain 46630 verifier 0x665736d2b8be0AD287534244c49Fa36a5dFaA5Da code bytes 17786
+genuine:            true
+genuine gas est:    4116515
+flipped proof byte: Error: server returned an error response: error code 3: execution reverted, data: "0xeb73e0bd"
+flipped input:      Error: server returned an error response: error code 3: execution reverted, data: "0x9fc3a218"
+other circuit:      Error: server returned an error response: error code 3: execution reverted, data: "0x59895a5300000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000001f400000000000000000000000000000000000000000000000000000000000002540"

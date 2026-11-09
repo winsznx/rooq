@@ -1,0 +1,36 @@
+No files changed, compilation skipped
+Warning: EIP-3855 is not supported in one or more of the RPCs used.
+Unsupported Chain IDs: 46630.
+Contracts deployed with a Solidity version equal or higher than 0.8.20 might not work properly.
+For more information, please see https://eips.ethereum.org/EIPS/eip-3855
+Script ran successfully.
+
+== Return ==
+verifier: address 0x665736d2b8be0AD287534244c49Fa36a5dFaA5Da
+
+== Logs ==
+  perp_open verifier 0x665736d2b8be0AD287534244c49Fa36a5dFaA5Da
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 46630
+
+Estimated gas price: 0.020000001 gwei
+
+Estimated total gas used for script: 9427337
+
+Estimated amount required: 0.000188546749427337 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /Users/mac/rooq/zk/bench/evm/broadcast/DeployVerifier.s.sol/46630/run-latest.json
+
+Sensitive values saved to: /Users/mac/rooq/zk/bench/evm/cache/DeployVerifier.s.sol/46630/run-latest.json
+

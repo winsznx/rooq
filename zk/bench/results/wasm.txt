@@ -1,0 +1,4 @@
+RESULT op=transfer backend=wasm threads=1 prove_s=2.47 verified=true proof_bytes=8000 rss_mb=404
+RESULT op=transfer backend=wasm threads=4 prove_s=1.25 verified=true proof_bytes=8000 rss_mb=643
+RESULT op=perp_open backend=wasm threads=1 prove_s=24.93 verified=true proof_bytes=9536 rss_mb=461
+RESULT op=perp_open backend=wasm threads=4 prove_s=9.37 verified=true proof_bytes=9536 rss_mb=598

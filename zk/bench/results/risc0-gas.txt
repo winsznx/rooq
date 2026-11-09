@@ -1,0 +1,5 @@
+[PASS] test_otherImageRejected() (gas: 239404)
+[PASS] test_tamperedJournalRejected() (gas: 239646)
+[PASS] test_transferReceiptVerifies() (gas: 243257)
+  risc0 groth16 verify gas: 227441
+  risc0 seal bytes: 260

@@ -1,0 +1,34 @@
+Compiling 2 files with Solc 0.8.28
+Solc 0.8.28 finished in 1.32s
+Compiler run successful!
+Script ran successfully.
+
+== Return ==
+verifier: address 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+== Logs ==
+  perp_open verifier 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 9427337
+
+Estimated amount required: 0.018854674009427337 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /Users/mac/rooq/zk/bench/evm/broadcast/DeployVerifier.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /Users/mac/rooq/zk/bench/evm/cache/DeployVerifier.s.sol/31337/run-latest.json
+

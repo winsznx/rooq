@@ -1,0 +1,3 @@
+transfer         "circuit_size": 13781
+perp_open         "circuit_size": 149841
+agg2         "circuit_size": 1470299

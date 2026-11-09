@@ -1,0 +1,6 @@
+chain 31337 verifier 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 code bytes 17786
+genuine:            true
+genuine gas est:    4084289
+flipped proof byte: Error: server returned an error response: error code 3: execution reverted: custom error 0xeb73e0bd, data: "0xeb73e0bd"
+flipped input:      Error: server returned an error response: error code 3: execution reverted: custom error 0x9fc3a218, data: "0x9fc3a218"
+other circuit:      Error: server returned an error response: error code 3: execution reverted: custom error 0x59895a53: @%@, data: "0x59895a5300000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000001f400000000000000000000000000000000000000000000000000000000000002540"

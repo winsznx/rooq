@@ -1,0 +1,12 @@
+RESULT op=perp_open mode=succinct run=0 prove_s=371.29 user_cycles=1302982 total_cycles=1572864 segments=2 receipt_bytes=222668 journal_bytes=2120
+IMAGE_ID ea5050f1e350203efd6c59fe01540f1f8392e39f9b2d897404c178e2505b3d37
+real 371.30
+user 1980.67
+sys 26.42
+peak_rss_kb 6759088
+RESULT op=transfer mode=groth16 run=0 prove_s=658.17 user_cycles=946065 total_cycles=1048576 segments=1 receipt_bytes=256 journal_bytes=1300
+IMAGE_ID ea5050f1e350203efd6c59fe01540f1f8392e39f9b2d897404c178e2505b3d37
+real 658.19
+user 1352.74
+sys 17.72
+peak_rss_kb 0
