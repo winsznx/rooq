@@ -1,0 +1,20 @@
+{
+  "name": "rooq",
+  "private": true,
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* --filter=./apps/* run build",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "contracts:build": "cd contracts && forge build",
+    "contracts:test": "cd contracts && forge test",
+    "kernel:test": "cargo test --workspace",
+    "dev:web": "pnpm --filter @rooq/web dev",
+    "dev:docs": "pnpm --filter @rooq/docs dev",
+    "dev:all": "bash scripts/local-up.sh"
+  }
+}
