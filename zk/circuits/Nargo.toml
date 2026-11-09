@@ -1,0 +1,3 @@
+[workspace]
+members = ["lib", "append", "spend", "lock", "open_pair", "liquidate", "release", "funding_epoch", "close_pair", "exit_request", "pair_update", "redeem_claim", "insurance_sweep", "bond_release", "swap", "lp_add", "lp_set", "lp_remove", "math_probe"]
+default-member = "spend"
