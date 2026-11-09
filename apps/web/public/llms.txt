@@ -1,0 +1,44 @@
+# Rooq
+
+> Rooq is a private market for stock tokens on Robinhood Chain testnet. People buy tokenized stocks such as TSLA, AMZN, PLTR, NFLX and AMD on spot, or trade their price with up to 2x leverage on perpetuals, while balances, positions, trades and profit or loss stay out of public view.
+
+Rooq runs on Robinhood Chain testnet (chain id 46630). Test tokens have no value. Rooq has not been audited.
+
+## What a person can do
+
+- Move USDG and Stock Tokens into a private balance (shield) and take them out again (unshield).
+- Send a private balance to another Rooq account.
+- Swap between USDG and Stock Tokens through private pools, including two-hop routes.
+- Open, add margin to, reduce and close long or short perpetual positions.
+- Add and remove liquidity in private pools and earn swap fees.
+- Back markets as a maker and earn the spread.
+- Create a new perpetual market on a fixed risk tier by posting a bond.
+- Force an exit from a position without Rooq's operators, after a 7-day delay.
+
+## How privacy works
+
+Tokens moved into Rooq sit in one shared contract. Inside it, a balance is a set of encrypted notes only the owner's device can read. The browser creates a zero-knowledge proof for each action, using Noir circuits and UltraHonk proofs, and the contract checks the proof on chain. Anyone can verify that every accepted action followed the rules without seeing the account.
+
+Deposits into Rooq and withdrawals from it are visible on chain. Everything between them is not published in readable form. Operators see what they need to match and risk-check trades.
+
+## Accounts
+
+A person connects a normal wallet and signs one message. The private account is derived from that signature in the browser, so the same wallet restores the same account on any device. There is no seed phrase to write down. No server receives the signature or keys.
+
+## Risk
+
+Perpetual positions can be liquidated and leverage can lose the full margin. Prices on testnet come from a single-operator test relay of Robinhood's reference prices.
+
+## Links
+
+- [Website](https://rooq.trade)
+- [Markets](https://rooq.trade/app/markets)
+- [Trade](https://rooq.trade/app/trade)
+- [Docs](https://docs.rooq.trade)
+- [Docs index for AI tools](https://docs.rooq.trade/llms.txt)
+- [Full docs as one text file](https://docs.rooq.trade/llms-full.txt)
+- [What is Rooq](https://docs.rooq.trade/introduction)
+- [How privacy works](https://docs.rooq.trade/how-privacy-works)
+- [Risks](https://docs.rooq.trade/risks)
+- [Contracts](https://docs.rooq.trade/contracts)
+- [FAQ](https://docs.rooq.trade/faq)
