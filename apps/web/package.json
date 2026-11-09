@@ -1,0 +1,42 @@
+{
+  "name": "@rooq/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3200",
+    "build": "next build",
+    "start": "next start --port 3200",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "proving-assets": "node scripts/sync-proving-assets.mjs",
+    "predev": "node scripts/sync-proving-assets.mjs",
+    "prebuild": "node scripts/sync-proving-assets.mjs"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "1.3.1",
+    "@radix-ui/react-popover": "1.3.1",
+    "@radix-ui/react-tooltip": "1.4.1",
+    "@rainbow-me/rainbowkit": "2.2.11",
+    "@rooq/config": "workspace:*",
+    "@rooq/private-sdk": "workspace:*",
+    "@rooq/sdk": "workspace:*",
+    "@rooq/ui": "workspace:*",
+    "@tanstack/react-query": "5.107.1",
+    "lightweight-charts": "5.2.1",
+    "motion": "12.43.0",
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "viem": "2.40.3",
+    "wagmi": "2.19.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.5",
+    "typescript": "5.9.3"
+  }
+}
