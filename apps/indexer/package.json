@@ -1,0 +1,25 @@
+{
+  "name": "@rooq/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "migrate": "bun run src/migrate.ts",
+    "replay": "bun run src/replay.ts",
+    "reorg-drill": "bun run src/reorg-drill.ts",
+    "restart-drill": "bun run src/restart-drill.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@rooq/config": "workspace:*",
+    "@rooq/sdk": "workspace:*",
+    "postgres": "3.4.9",
+    "viem": "2.40.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.3",
+    "typescript": "5.9.3"
+  }
+}
