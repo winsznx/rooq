@@ -1,0 +1,22 @@
+{
+  "name": "@rooq/maker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "quotes": "bun run src/quote-server.ts",
+    "relay": "bun run src/relay.ts",
+    "keeper": "bun run src/keeper.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@rooq/config": "workspace:*",
+    "@rooq/sdk": "workspace:*",
+    "viem": "2.40.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.3",
+    "typescript": "5.9.3"
+  }
+}
