@@ -1,0 +1,29 @@
+.summary { display: grid; padding: 18px 20px 8px; border: 1px solid var(--rq-line); border-radius: var(--rq-radius-large); background: var(--rq-surface); }
+.primary { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; padding-bottom: 14px; }
+.primaryText { display: grid; gap: 4px; }
+.primaryLabel { margin: 0; display: flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 400; color: var(--rq-ink-secondary); }
+.primaryValue {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-family: var(--rq-font-data-stack);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-size: clamp(32px, 4.4vw, 52px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.unit { font-family: var(--rq-font-ui-stack); font-size: 16px; font-weight: 400; letter-spacing: -0.01em; color: var(--rq-ink-secondary); }
+.stale { margin: 0; }
+.primaryActions { display: flex; gap: 8px; }
+.ledger { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--rq-line); }
+.ledger > div { display: grid; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--rq-line); }
+.ledger dt { display: flex; align-items: center; gap: 2px; font-size: 12px; color: var(--rq-ink-tertiary); white-space: nowrap; }
+.ledger dd { margin: 0; font-size: 15px; font-weight: 400; }
+@media (min-width: 1024px) {
+  .ledger { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0 16px; }
+  .ledger > div { border-bottom: 0; }
+  .exposure { border-left: 1px dashed var(--rq-line-strong); padding-left: 16px !important; }
+}

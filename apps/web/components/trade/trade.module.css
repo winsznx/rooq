@@ -1,0 +1,171 @@
+.stateWrap { padding: 16px; }
+
+/* market header: one line above the datum */
+.header {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas: "identity mode price" "meta meta meta";
+  align-items: center;
+  gap: 2px 10px;
+  padding: 6px 8px 4px;
+}
+.identity { grid-area: identity; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.symbol { margin: 0; font-size: 17px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 500; }
+.symbolButton { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0; border: 0; background: transparent; font: inherit; letter-spacing: inherit; cursor: pointer; }
+.watch { display: none; border: 0; background: transparent; width: 28px; height: 28px; padding: 0; place-items: center; color: var(--rq-ink-tertiary); cursor: pointer; }
+.watch[aria-pressed="true"] { color: var(--rq-accent); }
+.watch:hover { color: var(--rq-ink); }
+.header nav { grid-area: mode; }
+.priceBlock { grid-area: price; justify-self: end; display: grid; justify-items: end; }
+.price { font-family: var(--rq-font-data-stack); font-variant-numeric: tabular-nums lining-nums; font-size: 20px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 400; }
+.priceLabel { font-size: 11px; color: var(--rq-ink-tertiary); }
+.meta { grid-area: meta; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 28px; }
+.classTag { display: none; }
+.inlineFacts { display: none; margin: 0; gap: 16px; }
+.inlineFacts > div { display: flex; gap: 6px; align-items: baseline; font-size: 12px; white-space: nowrap; }
+.inlineFacts dt { color: var(--rq-ink-tertiary); }
+.inlineFacts dd { margin: 0; }
+.factsToggle { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0; border: 0; background: transparent; color: var(--rq-ink-secondary); font-size: 12px; font-weight: 400; white-space: nowrap; cursor: pointer; }
+.factsToggle:hover { color: var(--rq-ink); }
+.factsToggle svg { transition: transform var(--rq-t-select) var(--rq-ease); }
+.facts { display: grid; gap: 12px; margin: 0 0 4px; padding: 12px 16px; border: 1px solid var(--rq-line); border-radius: var(--rq-radius-panel); background: var(--rq-surface); }
+.facts dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+.facts dl > div { display: grid; gap: 2px; align-content: start; }
+.facts dt { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--rq-ink-tertiary); }
+.facts dd { margin: 0; font-size: 13px; font-weight: 500; }
+.factSub { display: block; font-family: var(--rq-font-ui-stack); font-size: 12px; font-weight: 400; color: var(--rq-ink-tertiary); }
+
+@media (min-width: 1024px) {
+  .header { grid-template-columns: auto auto auto minmax(0, 1fr); grid-template-areas: "identity mode price meta"; gap: 20px; padding: 4px 8px; min-height: 52px; }
+  .watch { display: inline-grid; }
+  .symbol { font-size: 19px; }
+  .priceBlock { justify-self: start; display: flex; align-items: baseline; gap: 6px; }
+  .price { font-size: 24px; }
+  .classTag, .inlineFacts { display: inline-flex; }
+  .meta { justify-content: flex-end; gap: 12px; }
+  .factsToggle { margin-left: 4px; }
+  .facts dl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 359px) {
+  .header { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "identity mode" "price price" "meta meta"; }
+  .header nav { justify-self: end; }
+  .priceBlock { justify-self: start; display: flex; align-items: baseline; gap: 6px; }
+}
+
+/* terminal grid */
+.page { min-width: 0; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 0 8px; grid-template-areas: "head" "bar" "chart" "ticket" "tray"; }
+.headArea { grid-area: head; min-width: 0; }
+.chartArea { grid-area: chart; min-width: 0; }
+.ticketArea { grid-area: ticket; min-width: 0; }
+.trayArea { grid-area: tray; min-width: 0; }
+@media (max-width: 1023px) {
+  .grid > [data-section-hidden="true"] { display: none; }
+}
+
+/* The bottom section bar replaces app navigation on a phone: fewer layers between the header and the ticket. */
+.sectionBar {
+  grid-area: bar;
+  position: fixed;
+  z-index: var(--rq-z-sticky);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--rq-tabbar-h);
+  padding-bottom: env(safe-area-inset-bottom);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  background: var(--rq-app-bg);
+  border-top: 1px solid var(--rq-line);
+}
+.sectionTabs { background: transparent; margin: 8px; }
+.menuButton { display: grid; justify-items: center; align-content: center; gap: 2px; border: 0; background: transparent; color: var(--rq-ink-tertiary); font-size: 11px; font-weight: 600; cursor: pointer; }
+
+:global(html[data-keyboard="open"]) .sectionBar { visibility: hidden; }
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sectionBar { position: static; height: auto; padding-bottom: 0; grid-template-columns: minmax(0, 1fr); border-top: 0; border-bottom: 1px solid var(--rq-line); }
+  .menuButton { display: none; }
+}
+@media (min-width: 1024px) {
+  .sectionBar { display: none; }
+  .page { height: calc(100dvh - var(--rq-header-h) - var(--rq-statusbar-h)); min-height: 460px; overflow: hidden; }
+  .grid {
+    height: 100%;
+    padding: 0 8px 8px 0;
+    grid-template-columns: minmax(0, 1fr) var(--rq-layout-desktop-ticket);
+    grid-template-rows: auto minmax(0, 1fr) minmax(170px, 28%);
+    grid-template-areas: "head head" "chart ticket" "tray ticket";
+  }
+  .ticketArea { min-height: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); }
+  .ticketPanel { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+  .trayArea { min-height: 0; display: grid; }
+}
+@media (min-width: 1920px) {
+  .grid { grid-template-columns: minmax(0, 1fr) var(--rq-layout-wide-ticket); }
+}
+
+/* chart */
+.chart { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; border: 1px solid var(--rq-line); border-radius: var(--rq-radius-panel); background: var(--rq-surface); overflow: hidden; }
+.chartHead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; padding: 8px 12px; }
+.chartLegend { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.chartBody { position: relative; min-height: 300px; display: grid; }
+.chartCanvas { min-height: 300px; height: 100%; }
+.chartCanvas[data-empty="true"] { visibility: hidden; }
+.chartNote { position: absolute; inset: 0; display: grid; place-content: center; margin: 0; padding: 24px; text-align: center; font-size: 13px; color: var(--rq-ink-secondary); }
+@media (min-width: 1024px) {
+  .chartBody, .chartCanvas { min-height: 0; }
+}
+
+/* position tray */
+.tray { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; height: 100%; border: 1px solid var(--rq-line); border-radius: var(--rq-radius-panel); background: var(--rq-surface); overflow: hidden; }
+.trayTabs { justify-self: start; margin: 8px 12px 4px; }
+.trayBody { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.trayNote { margin: 0; padding: 8px 16px; font-size: 12px; color: var(--rq-ink-tertiary); }
+.fills td, .fills th { height: 30px; padding: 0 16px; font-size: 12px; }
+
+/* ticket */
+.ticketPanel { padding: 14px 16px 0; min-width: 0; border: 1px solid var(--rq-line); border-radius: var(--rq-radius-panel); background: var(--rq-surface); }
+.ticket { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.ticketContext { display: grid; gap: 2px; }
+.modeNote { margin: 0; font-size: 13px; font-weight: 500; }
+.modeMeta { font-size: 12px; color: var(--rq-ink-tertiary); }
+.leverageRow { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; align-items: center; }
+.leverageInput { min-height: 40px; }
+.leverageInput input { font-size: 15px; padding: 6px 0; }
+
+/* Three visibly different things: the firm price, the reference mark, and estimates. */
+.priceStack { display: grid; gap: 8px; }
+.pxLabel { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--rq-ink-secondary); }
+.firm { position: relative; display: grid; gap: 2px; padding: 10px 12px 12px; overflow: hidden; border-radius: var(--rq-radius-input); background: var(--rq-surface-raised); }
+.firmHead, .firmFoot { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.firmExpiry { font-family: var(--rq-font-data-stack); font-size: 12px; font-weight: 500; }
+.firmPrice { font-family: var(--rq-font-data-stack); font-variant-numeric: tabular-nums lining-nums; font-size: 28px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 400; }
+.firmFoot { font-size: 12px; color: var(--rq-ink-tertiary); }
+.expiryLine { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--rq-ink-tertiary); transform-origin: left center; }
+.quoteState { margin: 0; padding: 10px 12px; border-radius: var(--rq-radius-input); background: var(--rq-surface-raised); font-size: 13px; color: var(--rq-ink-secondary); }
+.quoteState[data-tone="warning"] { color: var(--rq-warning); }
+.quoteState[data-tone="negative"] { color: var(--rq-negative); }
+.reference { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 12px; }
+.refPrice { font-family: var(--rq-font-data-stack); font-variant-numeric: tabular-nums lining-nums; font-size: 14px; font-weight: 500; }
+.estimates { padding: 0 12px; }
+.marginSummary { padding: 6px 12px 0; border-top: 1px solid var(--rq-line); }
+.withAction { display: flex; align-items: center; gap: 8px; }
+.withAction button { font-size: 12px; }
+.receiveBox { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 12px; border-radius: var(--rq-radius-input); background: var(--rq-surface-raised); }
+.receiveValue { display: inline-flex; align-items: baseline; gap: 6px; font-family: var(--rq-font-data-stack); font-variant-numeric: tabular-nums lining-nums; font-size: 22px; font-weight: 400; letter-spacing: -0.02em; }
+.riskNote { margin: 0; font-size: 12px; line-height: 1.4; color: var(--rq-ink-tertiary); }
+.ctaWrap {
+  position: sticky;
+  bottom: max(var(--rq-kb-h, 0px), calc(var(--rq-tabbar-h) + var(--rq-dock-h)));
+  z-index: var(--rq-z-sticky);
+  margin: 0 -16px;
+  padding: 10px 16px 12px;
+  background: var(--rq-surface);
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .ctaWrap { bottom: var(--rq-statusbar-h); }
+}
+@media (min-width: 1024px) {
+  .ctaWrap { bottom: 0; }
+}
