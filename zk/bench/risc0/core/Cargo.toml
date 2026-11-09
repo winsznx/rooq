@@ -1,0 +1,11 @@
+[package]
+name = "bench-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+sha2 = { version = "0.10.9", default-features = false }
+k256 = { version = "0.13.4", default-features = false, features = ["arithmetic", "ecdsa", "alloc"] }
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+ruint = { version = "1.12", default-features = false }

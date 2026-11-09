@@ -1,0 +1,12 @@
+[package]
+name = "host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+risc0-zkvm = { workspace = true }
+methods = { path = "../methods" }
+bench-core = { path = "../core" }
+k256 = { version = "0.13.4", features = ["ecdsa"] }
+hex = "0.4"
+serde_json = "1"
