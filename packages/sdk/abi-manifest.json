@@ -1,0 +1,62 @@
+{
+  "ClearingHouse": {
+    "source": "contracts/src/perps/ClearingHouse.sol",
+    "runtimeBytecodeSha256": "b523562f2897da80dc7cc5c65ede1bc3d1446fc4d7b23474bf7f7a9779d6c114",
+    "runtimeBytes": 23342
+  },
+  "MarginVault": {
+    "source": "contracts/src/perps/MarginVault.sol",
+    "runtimeBytecodeSha256": "7e23a5ebb9f023878d655969e7605fbc697af1318a287d8d93d4c86311f6cc4d",
+    "runtimeBytes": 2918
+  },
+  "MarketBackstop": {
+    "source": "contracts/src/perps/MarketBackstop.sol",
+    "runtimeBytecodeSha256": "2778635f909ce8e407ad022b4320e35cabb040eaa312ca01d0f859f804fe369e",
+    "runtimeBytes": 5175
+  },
+  "PerpLens": {
+    "source": "contracts/src/perps/PerpLens.sol",
+    "runtimeBytecodeSha256": "d0024518a401472f4250556402c235bb68485d6fb2ca1fd4ae9d7776650001b8",
+    "runtimeBytes": 4990
+  },
+  "MarketRegistry": {
+    "source": "contracts/src/market/MarketRegistry.sol",
+    "runtimeBytecodeSha256": "3cd0038c40afb34a9a033994feb8ec2fd475f468e679cc1e880e83bfa6fa8eb5",
+    "runtimeBytes": 11193
+  },
+  "MarketPreflight": {
+    "source": "contracts/src/market/MarketPreflight.sol",
+    "runtimeBytecodeSha256": "2d5749e106b3c121713f9692266befb333e7b0a3d5ae0289dd30112cc014fd56",
+    "runtimeBytes": 4620
+  },
+  "OracleAdapter": {
+    "source": "contracts/src/oracle/OracleAdapter.sol",
+    "runtimeBytecodeSha256": "aa94d9e1a3af6b387e2d14b9bb62bb722e9da2ead232e7bcdb542f0c59460967",
+    "runtimeBytes": 3588
+  },
+  "MockPriceFeed": {
+    "source": "contracts/src/oracle/MockPriceFeed.sol",
+    "runtimeBytecodeSha256": "2cc1548733e37f5c0fe87026ae471fbc54f3298829a1664a43d1d7d07d962f07",
+    "runtimeBytes": 1111
+  },
+  "SpotFactory": {
+    "source": "contracts/src/spot/SpotFactory.sol",
+    "runtimeBytecodeSha256": "ca3474eae3bdaea4a28395dce188903dddcf1024b77fa36f3d2364f6a05b8ef3",
+    "runtimeBytes": 9765
+  },
+  "SpotPool": {
+    "source": "contracts/src/spot/SpotPool.sol",
+    "runtimeBytecodeSha256": "d91087fb6202bf59a46768ff1053aa110b2b1a6f4b28246adea881743dbb9c02",
+    "runtimeBytes": 7307
+  },
+  "SpotRouter": {
+    "source": "contracts/src/spot/SpotRouter.sol",
+    "runtimeBytecodeSha256": "d83aaaced87c14fadfd319fc2534a1ad05e4f39ed5434c4c0e5565f874c599ee",
+    "runtimeBytes": 2776
+  },
+  "MockERC20": {
+    "source": "contracts/src/tokens/MockERC20.sol",
+    "runtimeBytecodeSha256": "a2837351b1445ff95de7a6dac1e2a81c8f470506504715d88a60912b49dce273",
+    "runtimeBytes": 2543
+  }
+}
