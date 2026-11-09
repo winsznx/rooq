@@ -1,0 +1,471 @@
+{
+  "drill": "restart",
+  "ok": true,
+  "ranAt": "2026-11-07T18:54:54.253Z",
+  "env": "local",
+  "chainId": 31337,
+  "rpc": "http://127.0.0.1:8556",
+  "forkedFrom": "http://127.0.0.1:8545",
+  "schema": "drill_restart",
+  "reducerVersion": 1,
+  "drillAccount": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+  "firstRun": {
+    "cursorAtKill": {
+      "last_block": "157",
+      "last_hash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15"
+    },
+    "killedWith": "SIGKILL",
+    "exitCode": 137,
+    "rangesIndexed": 1
+  },
+  "whileDown": {
+    "txs": [
+      {
+        "step": "faucet 2000000000",
+        "hash": "0x01dff8c5c0a420a6c69f238ef018761dde6765b7541a975a6b10f9f4f63c4a50",
+        "block": "158",
+        "status": "success",
+        "logs": 2
+      },
+      {
+        "step": "approve 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 1500000000",
+        "hash": "0x66a9806849bcf7d754f0b37388982401f12030fc94c9f05add09486b01f8c74d",
+        "block": "159",
+        "status": "success",
+        "logs": 1
+      },
+      {
+        "step": "deposit 1500000000",
+        "hash": "0xdb0fd85a8dedd3c46e871a2341b4b8d288b2c762e0939b419451a159f0915dfe",
+        "block": "160",
+        "status": "success",
+        "logs": 2
+      },
+      {
+        "step": "withdraw 400000000",
+        "hash": "0x204408257e114330a160ce57d3ed612838a9f441b6dc25af79b00179cfcb475e",
+        "block": "161",
+        "status": "success",
+        "logs": 2
+      },
+      {
+        "step": "approve 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 100000000",
+        "hash": "0xe616711dc1eaf79038b6f9ef1a891d7202701ac0ac71cb940ac50ace12f04ef3",
+        "block": "162",
+        "status": "success",
+        "logs": 1
+      },
+      {
+        "step": "swap 100000000 collateral for mTSLA",
+        "hash": "0x6c53a2bbbfb399c32023953d62d8947dea68033938e5edc762bb17a7fc5a8f87",
+        "block": "163",
+        "status": "success",
+        "logs": 6
+      }
+    ],
+    "emptyBlocksMined": 3,
+    "cursor": {
+      "last_block": "157",
+      "last_hash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15"
+    }
+  },
+  "secondRun": {
+    "opened": {
+      "t": "2026-11-07T18:54:53.911Z",
+      "service": "indexer",
+      "level": "info",
+      "event": "indexer_opened",
+      "chainId": 31337,
+      "env": "local",
+      "schema": "drill_restart",
+      "genesis": "0x7e30b247f57b74232c92819e34776dbb4a1a28b6d1de7a247d6b9cd3c21641ed",
+      "cursor": {
+        "block": "157",
+        "hash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15"
+      },
+      "replayedEvents": 285,
+      "watched": 19,
+      "reducerVersion": 1
+    },
+    "firstRange": {
+      "t": "2026-11-07T18:54:53.930Z",
+      "service": "indexer",
+      "level": "info",
+      "event": "range_indexed",
+      "from": "158",
+      "to": "166",
+      "hash": "0xd6610faba5db41e3b93c5bfaf3f613497fc854eb8f34412a2a5e88c0f41d24c8",
+      "logs": 4,
+      "decoded": 4,
+      "discovered": [],
+      "head": "166",
+      "status": "ok"
+    },
+    "cursor": {
+      "last_block": "166",
+      "last_hash": "0xd6610faba5db41e3b93c5bfaf3f613497fc854eb8f34412a2a5e88c0f41d24c8"
+    },
+    "stoppedWith": "SIGTERM",
+    "exitCode": 0
+  },
+  "head": {
+    "number": "166",
+    "hash": "0xd6610faba5db41e3b93c5bfaf3f613497fc854eb8f34412a2a5e88c0f41d24c8"
+  },
+  "blocks": {
+    "n": "167",
+    "lo": "0",
+    "hi": "166",
+    "distinct_numbers": "167"
+  },
+  "gaps": [],
+  "events": {
+    "node": 289,
+    "stored": 289,
+    "missing": [],
+    "extra": [],
+    "duplicates": []
+  },
+  "perTx": [
+    {
+      "step": "faucet 2000000000",
+      "hash": "0x01dff8c5c0a420a6c69f238ef018761dde6765b7541a975a6b10f9f4f63c4a50",
+      "block": "158",
+      "watchedLogs": 0,
+      "indexedRows": 0
+    },
+    {
+      "step": "approve 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 1500000000",
+      "hash": "0x66a9806849bcf7d754f0b37388982401f12030fc94c9f05add09486b01f8c74d",
+      "block": "159",
+      "watchedLogs": 0,
+      "indexedRows": 0
+    },
+    {
+      "step": "deposit 1500000000",
+      "hash": "0xdb0fd85a8dedd3c46e871a2341b4b8d288b2c762e0939b419451a159f0915dfe",
+      "block": "160",
+      "watchedLogs": 1,
+      "indexedRows": 1
+    },
+    {
+      "step": "withdraw 400000000",
+      "hash": "0x204408257e114330a160ce57d3ed612838a9f441b6dc25af79b00179cfcb475e",
+      "block": "161",
+      "watchedLogs": 1,
+      "indexedRows": 1
+    },
+    {
+      "step": "approve 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 100000000",
+      "hash": "0xe616711dc1eaf79038b6f9ef1a891d7202701ac0ac71cb940ac50ace12f04ef3",
+      "block": "162",
+      "watchedLogs": 0,
+      "indexedRows": 0
+    },
+    {
+      "step": "swap 100000000 collateral for mTSLA",
+      "hash": "0x6c53a2bbbfb399c32023953d62d8947dea68033938e5edc762bb17a7fc5a8f87",
+      "block": "163",
+      "watchedLogs": 2,
+      "indexedRows": 2
+    }
+  ],
+  "vaultMovements": [
+    {
+      "kind": "deposit",
+      "amount": "1500000000",
+      "tx_hash": "0xdb0fd85a8dedd3c46e871a2341b4b8d288b2c762e0939b419451a159f0915dfe"
+    },
+    {
+      "kind": "withdraw",
+      "amount": "400000000",
+      "tx_hash": "0x204408257e114330a160ce57d3ed612838a9f441b6dc25af79b00179cfcb475e"
+    }
+  ],
+  "derived": {
+    "incremental": {
+      "tables": {
+        "markets": {
+          "rows": 7,
+          "sha256": "6add19f617a42633189b052cec25a2be02edfd54b371cab971b5420afed61d15"
+        },
+        "positions": {
+          "rows": 2,
+          "sha256": "86db356c1a847f6b7191497c03e9522af37f5655bdb1019f406e58e6dd5136fb"
+        },
+        "pools": {
+          "rows": 7,
+          "sha256": "3065de87c9394ad228b8f58c053bd7a135d7cace14c3729e2c1363defeb45ca5"
+        },
+        "lp_balances": {
+          "rows": 15,
+          "sha256": "87143407665828d8580a5850d04a7d80a54f373f6e73bf81501848f533a5de1b"
+        },
+        "vault_balances": {
+          "rows": 22,
+          "sha256": "45c556c1c3d69a78828f0606ef8ae372ee8d70fc2c5597d1f29b19701264dc1e"
+        },
+        "vault_state": {
+          "rows": 1,
+          "sha256": "b6ce244a225acd5aa307e20f5539a77d6a530184e3f0214961d2ed667ff3bf96"
+        },
+        "feeds": {
+          "rows": 5,
+          "sha256": "d0116c9f672dd6415be8317c0ddeb9243270620e2a3f566baf1ff1b586a7fd88"
+        },
+        "trades": {
+          "rows": 15,
+          "sha256": "4d120d60bc6a4f2335a2f97a0f67c40ea1e93e5bdaaf77b1eebad6ac4667bf3d"
+        },
+        "position_events": {
+          "rows": 15,
+          "sha256": "8db4f4f2e6a6985b16a604c4efa89e316f13dfca0f76b275abfc80bf7ff083f5"
+        },
+        "funding_events": {
+          "rows": 14,
+          "sha256": "4a226a24fe9bcf40f75d76c4524375900c45db10d425c7a573c36f1a77b44e86"
+        },
+        "liquidations": {
+          "rows": 1,
+          "sha256": "f5b6e1b0b8c73e44fd397612ddc8e0acbe37284a049453088d156821c51bed62"
+        },
+        "pool_events": {
+          "rows": 22,
+          "sha256": "00d57ab88863e59baba4abcaa8f5561607726dab43b363b73e76f1aea9d02c50"
+        },
+        "vault_movements": {
+          "rows": 21,
+          "sha256": "cf0d339298041eb4783cb8f9e9c70518ef36b44f93ec1984141d37cc57dd9641"
+        },
+        "oracle_observations": {
+          "rows": 28,
+          "sha256": "ec675329aa3342df721c101c70980696e679a1f27530c7605ed5e3f42ff25976"
+        },
+        "market_status_events": {
+          "rows": 11,
+          "sha256": "7bbf2a02cffb020231a9be37ab5e622ad99521ff9cd91a4bc381eeabedc0385b"
+        }
+      },
+      "sha256": "c1b09e9745458040d5a50bc72f18dc7c8999d1e818cb489adb1317a307995547"
+    },
+    "replay": {
+      "before": "c1b09e9745458040d5a50bc72f18dc7c8999d1e818cb489adb1317a307995547",
+      "after": "c1b09e9745458040d5a50bc72f18dc7c8999d1e818cb489adb1317a307995547",
+      "identical": true,
+      "events": 289
+    }
+  },
+  "reconciliation": {
+    "block_number": "166",
+    "ok": true,
+    "checks": 111,
+    "mismatches": 0
+  },
+  "indexerStatus": {
+    "status": "ok",
+    "reason": null,
+    "last_indexed_block": "166",
+    "last_indexed_hash": "0xd6610faba5db41e3b93c5bfaf3f613497fc854eb8f34412a2a5e88c0f41d24c8"
+  },
+  "assertions": [
+    {
+      "name": "first run caught up to the fork tip before the kill",
+      "ok": true,
+      "detail": {
+        "cursor": {
+          "last_block": "157",
+          "last_hash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15"
+        },
+        "tip": {
+          "number": "157",
+          "hash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15"
+        }
+      }
+    },
+    {
+      "name": "nothing was indexed while the process was down",
+      "ok": true,
+      "detail": {
+        "whileDown": {
+          "last_block": "157",
+          "last_hash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15"
+        }
+      }
+    },
+    {
+      "name": "restarted process opened from the stored cursor",
+      "ok": true,
+      "detail": {
+        "opened": {
+          "block": "157",
+          "hash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15"
+        }
+      }
+    },
+    {
+      "name": "first range after restart starts at cursor + 1",
+      "ok": true,
+      "detail": {
+        "firstRange": {
+          "t": "2026-11-07T18:54:53.930Z",
+          "service": "indexer",
+          "level": "info",
+          "event": "range_indexed",
+          "from": "158",
+          "to": "166",
+          "hash": "0xd6610faba5db41e3b93c5bfaf3f613497fc854eb8f34412a2a5e88c0f41d24c8",
+          "logs": 4,
+          "decoded": 4,
+          "discovered": [],
+          "head": "166",
+          "status": "ok"
+        }
+      }
+    },
+    {
+      "name": "caught up to the new head",
+      "ok": true,
+      "detail": {
+        "cursor": {
+          "last_block": "166",
+          "last_hash": "0xd6610faba5db41e3b93c5bfaf3f613497fc854eb8f34412a2a5e88c0f41d24c8"
+        },
+        "head": {
+          "number": "166",
+          "hash": "0xd6610faba5db41e3b93c5bfaf3f613497fc854eb8f34412a2a5e88c0f41d24c8"
+        }
+      }
+    },
+    {
+      "name": "canonical blocks are contiguous from the deploy block with one row per height",
+      "ok": true,
+      "detail": {
+        "stats": {
+          "n": "167",
+          "lo": "0",
+          "hi": "166",
+          "distinct_numbers": "167"
+        },
+        "gaps": []
+      }
+    },
+    {
+      "name": "no canonical event is stored twice",
+      "ok": true,
+      "detail": {
+        "duplicateEvents": []
+      }
+    },
+    {
+      "name": "canonical raw events equal the node's logs for every watched address",
+      "ok": true,
+      "detail": {
+        "node": 289,
+        "stored": 289,
+        "missing": [],
+        "extra": []
+      }
+    },
+    {
+      "name": "each drill transaction is indexed exactly once",
+      "ok": true,
+      "detail": {
+        "perTx": [
+          {
+            "step": "faucet 2000000000",
+            "hash": "0x01dff8c5c0a420a6c69f238ef018761dde6765b7541a975a6b10f9f4f63c4a50",
+            "block": "158",
+            "watchedLogs": 0,
+            "indexedRows": 0
+          },
+          {
+            "step": "approve 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 1500000000",
+            "hash": "0x66a9806849bcf7d754f0b37388982401f12030fc94c9f05add09486b01f8c74d",
+            "block": "159",
+            "watchedLogs": 0,
+            "indexedRows": 0
+          },
+          {
+            "step": "deposit 1500000000",
+            "hash": "0xdb0fd85a8dedd3c46e871a2341b4b8d288b2c762e0939b419451a159f0915dfe",
+            "block": "160",
+            "watchedLogs": 1,
+            "indexedRows": 1
+          },
+          {
+            "step": "withdraw 400000000",
+            "hash": "0x204408257e114330a160ce57d3ed612838a9f441b6dc25af79b00179cfcb475e",
+            "block": "161",
+            "watchedLogs": 1,
+            "indexedRows": 1
+          },
+          {
+            "step": "approve 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 100000000",
+            "hash": "0xe616711dc1eaf79038b6f9ef1a891d7202701ac0ac71cb940ac50ace12f04ef3",
+            "block": "162",
+            "watchedLogs": 0,
+            "indexedRows": 0
+          },
+          {
+            "step": "swap 100000000 collateral for mTSLA",
+            "hash": "0x6c53a2bbbfb399c32023953d62d8947dea68033938e5edc762bb17a7fc5a8f87",
+            "block": "163",
+            "watchedLogs": 2,
+            "indexedRows": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "vault movements show the deposit and withdrawal sent while the indexer was down",
+      "ok": true,
+      "detail": {
+        "movements": [
+          {
+            "kind": "deposit",
+            "amount": "1500000000",
+            "tx_hash": "0xdb0fd85a8dedd3c46e871a2341b4b8d288b2c762e0939b419451a159f0915dfe"
+          },
+          {
+            "kind": "withdraw",
+            "amount": "400000000",
+            "tx_hash": "0x204408257e114330a160ce57d3ed612838a9f441b6dc25af79b00179cfcb475e"
+          }
+        ]
+      }
+    },
+    {
+      "name": "incremental derived state equals a fresh replay",
+      "ok": true,
+      "detail": {
+        "incremental": "c1b09e9745458040d5a50bc72f18dc7c8999d1e818cb489adb1317a307995547",
+        "replayBefore": "c1b09e9745458040d5a50bc72f18dc7c8999d1e818cb489adb1317a307995547",
+        "replayAfter": "c1b09e9745458040d5a50bc72f18dc7c8999d1e818cb489adb1317a307995547"
+      }
+    },
+    {
+      "name": "latest reconciliation is at the head and passed",
+      "ok": true,
+      "detail": {
+        "reconciliation": {
+          "block_number": "166",
+          "ok": true,
+          "checks": 111,
+          "mismatches": 0
+        }
+      }
+    },
+    {
+      "name": "indexer status is ok",
+      "ok": true,
+      "detail": {
+        "status": {
+          "status": "ok",
+          "reason": null,
+          "last_indexed_block": "166",
+          "last_indexed_hash": "0xd6610faba5db41e3b93c5bfaf3f613497fc854eb8f34412a2a5e88c0f41d24c8"
+        }
+      }
+    }
+  ]
+}

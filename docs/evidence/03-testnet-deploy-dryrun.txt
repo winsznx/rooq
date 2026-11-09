@@ -1,0 +1,5 @@
+  Deployment written to deployments/testnet.dryrun.json and .markets.json
+Estimated gas price: 0.020000001 gwei
+Estimated total gas used for script: 43896008
+Estimated amount required: 0.000877920203896008 ETH
+SIMULATION COMPLETE. To broadcast these transactions, add --broadcast and wallet configuration(s) to the previous command. See forge script --help for more.

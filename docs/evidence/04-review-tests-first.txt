@@ -1,0 +1,2 @@
+Error: Compiler run failed:
+Error (9582): Member "StaleReduceMustClose" not found or not visible after argument-dependent lookup in type(contract ClearingHouse).

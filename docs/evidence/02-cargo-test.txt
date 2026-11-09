@@ -1,0 +1,29 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running unittests src/lib.rs (target/debug/deps/rooq_risk_kernel-90ece5e63e56ef6a)
+
+running 10 tests
+test pair::tests::rejects_under_margined_open ... ok
+test pair::tests::lifecycle_conserves_ledger ... ok
+test tests::pnl_trunc_and_floor_differ_only_on_remainder ... ok
+test tests::fee_matches_solidity_unit_test ... ok
+test tests::funding_owed_rounds_against_payer ... ok
+test tests::funding_rate_capped_at_full_skew ... ok
+test tests::opposite_sides_never_create_value ... ok
+test tests::initial_margin_half_of_notional ... ok
+test tests::swap_keeps_k ... ok
+test tests::sqrt_is_floor ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/gen_vectors.rs (target/debug/deps/gen_vectors-d7b52ba636662038)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests rooq_risk_kernel
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

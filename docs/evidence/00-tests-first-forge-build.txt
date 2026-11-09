@@ -1,0 +1,15 @@
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "src/spot/SpotRouter.sol" not found: File not found. Searched the following locations: "/Users/mac/rooq/contracts".
+ParserError: Source "src/spot/SpotRouter.sol" not found: File not found. Searched the following locations: "/Users/mac/rooq/contracts".
+  --> test/utils/Fixture.sol:15:1:
+   |
+15 | import {SpotRouter} from "../../src/spot/SpotRouter.sol";
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "src/lib/Types.sol" not found: File not found. Searched the following locations: "/Users/mac/rooq/contracts".
+ParserError: Source "src/lib/Types.sol" not found: File not found. Searched the following locations: "/Users/mac/rooq/contracts".
+  --> test/utils/Fixture.sol:16:1:
+   |
+16 | import {Types} from "../../src/lib/Types.sol";
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

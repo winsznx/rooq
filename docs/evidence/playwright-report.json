@@ -1,0 +1,1185 @@
+{
+  "config": {
+    "argv": [
+      "/Users/mac/.nvm/versions/node/v24.19.0/bin/node",
+      "/Users/mac/rooq/node_modules/.pnpm/@playwright+test@1.65.0/node_modules/@playwright/test/cli.js",
+      "test",
+      "--project=desktop"
+    ],
+    "configFile": "/Users/mac/rooq/e2e/playwright.config.ts",
+    "rootDir": "/Users/mac/rooq/e2e/ui",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/mac/rooq/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "desktop",
+        "name": "desktop",
+        "testDir": "/Users/mac/rooq/e2e/ui",
+        "testIgnore": [],
+        "testMatch": [
+          "/.*\\.(flow|a11y)\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/mac/rooq/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "mobile",
+        "name": "mobile",
+        "testDir": "/Users/mac/rooq/e2e/ui",
+        "testIgnore": [],
+        "testMatch": [
+          "/.*\\.mobile\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/mac/rooq/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "screens",
+        "name": "screens",
+        "testDir": "/Users/mac/rooq/e2e/ui",
+        "testIgnore": [],
+        "testMatch": [
+          "/.*\\.screens\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/Users/mac/rooq/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "desktop",
+        "testDir": "/Users/mac/rooq/e2e/ui",
+        "snapshotDir": "/Users/mac/rooq/e2e/ui",
+        "testIgnore": [],
+        "testMatch": {},
+        "timeout": 120000,
+        "use": {
+          "baseURL": "http://localhost:3200",
+          "trace": "retain-on-failure",
+          "screenshot": "only-on-failure",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.8127.18 Safari/537.36",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "screen": {
+            "width": 1920,
+            "height": 1080
+          },
+          "deviceScaleFactor": 1,
+          "isMobile": false,
+          "hasTouch": false,
+          "defaultBrowserType": "chromium"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": "desktop"
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "../docs/evidence/playwright-report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.65.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "pages.a11y.spec.ts",
+      "file": "pages.a11y.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "light / has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5350,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:03.890Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-c2580b97d5fae1bacd5e",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /how-it-works has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2834,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:09.588Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-81bacac4c998f730be37",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /learn has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3110,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:12.428Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-cb2e236cb74facbfe06e",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /docs has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2835,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:15.546Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-3a0c717e8120eb98194e",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /developers has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2646,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:18.388Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-39068b30951604d0830a",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /status has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2974,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:21.040Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-7dd5f41d3baa672be2a4",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /app has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3000,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:24.020Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-e39167397494e2c5967e",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /app/markets has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3016,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:27.026Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-76d958db4ee12768e835",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /app/trade/TSLA?mode=perps has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3632,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:30.048Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-07d07e7d73a6cb13273e",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /app/trade/TSLA?mode=spot has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2939,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:33.688Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-fcbf415836e03590f66b",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /app/swap has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2892,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:36.635Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-dcc96836feb5a9439ec4",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /app/portfolio has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3221,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:39.533Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-6d0143d090927af9de5a",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /app/activity has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2922,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:42.764Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-513df31762be37a63908",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "light /app/settings has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2976,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:45.701Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-79f87ab26729865b118b",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark / has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2906,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:48.682Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-d88b917a20e740682938",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /how-it-works has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2548,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:51.594Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-b28d7ae791c4afed98ac",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /learn has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2635,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:54.147Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-8fceb8ce49edabc43cbd",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /docs has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2568,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:56.788Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-7eddcd7b17e3c2ca3c42",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /developers has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2493,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:34:59.361Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-b12ae5f1e73a1c21f819",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /status has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2841,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:01.859Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-70970089dc3cae7d5a92",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /app has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2839,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:04.706Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-9f51168c85b9818fb464",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /app/markets has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2992,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:07.551Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-d1a43ebe9ec8c56faaa8",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /app/trade/TSLA?mode=perps has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3147,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:10.548Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-3c33b22ea9cd1849c8a2",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /app/trade/TSLA?mode=spot has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2974,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:13.701Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-dacdcd5928122d11f37b",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /app/swap has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2925,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:16.682Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-fe511b592d82ca48ca23",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /app/portfolio has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2791,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:19.613Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-2fd6b19c298f96c55e32",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /app/activity has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2769,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:22.409Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-38961f389c0da0d2fdb9",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "dark /app/settings has no serious accessibility violations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2780,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:25.184Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-b172a24272d0e1676a23",
+          "file": "pages.a11y.spec.ts",
+          "line": 8,
+          "column": 5
+        },
+        {
+          "title": "keyboard: skip link and dialog focus return",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1227,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:27.970Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b5cf5d67485cb8f8a490-a3cf5e6d94cde812f7b3",
+          "file": "pages.a11y.spec.ts",
+          "line": 22,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "perps.flow.spec.ts",
+      "file": "perps.flow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "open and close a 2x long through the UI",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9048,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-07T22:35:29.402Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7d8193047ca0367869f1-a4352c7e7a7486477d66",
+          "file": "perps.flow.spec.ts",
+          "line": 30,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-07T22:34:03.179Z",
+    "duration": 95593.844,
+    "expected": 30,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

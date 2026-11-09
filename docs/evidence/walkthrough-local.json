@@ -1,0 +1,615 @@
+{
+  "env": "local",
+  "chainId": 31337,
+  "rpc": "http://127.0.0.1:8545",
+  "ranAt": "2026-11-07T21:54:38.435Z",
+  "deployment": {
+    "clearingHouse": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+    "marginVault": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+    "marketRegistry": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+    "marketPreflight": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"
+  },
+  "wallets": {
+    "creator": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "trader": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    "trader2": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+    "liquidator": "0x90F79bf6EB2c4f870365E785982E1f101E93b906"
+  },
+  "steps": [
+    {
+      "gate": "T01",
+      "step": "chain id verified",
+      "detail": {
+        "chainId": 31337,
+        "expected": 31337,
+        "env": "local"
+      }
+    },
+    {
+      "gate": "V1-07",
+      "step": "maker quote service",
+      "detail": {
+        "status": "quoting",
+        "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "signer": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+        "chainId": 31337,
+        "block": "84"
+      }
+    },
+    {
+      "gate": "T02",
+      "step": "faucet test collateral (mUSD)",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0x16def088564ba3c81b4df2a9e2a015ed5764ba6c2ceae75054096d0f305f6788",
+      "block": "85",
+      "gasUsed": "74521",
+      "status": "success",
+      "events": [
+        "Transfer"
+      ]
+    },
+    {
+      "gate": "T02",
+      "step": "approve exact amount to MarginVault",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0xd2a1799c3e442de9ee8caa73fd317e7f3935690b96695589d3e53e93bc4cebcc",
+      "block": "86",
+      "gasUsed": "45933",
+      "status": "success",
+      "events": [
+        "Approval"
+      ]
+    },
+    {
+      "gate": "T02",
+      "step": "deposit collateral to MarginVault",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0x6685c5c859a8a64f85c211f970e3c143761186a97c435786a78031eb1be3e126",
+      "block": "87",
+      "gasUsed": "71796",
+      "status": "success",
+      "events": [
+        "Transfer",
+        "Deposited"
+      ]
+    },
+    {
+      "gate": "T02",
+      "step": "trader free vault balance",
+      "detail": {
+        "free": "10000000000"
+      }
+    },
+    {
+      "gate": "T03",
+      "step": "approve router exact amount",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0x58ccf6fbf31dc699cd1344f543496983a462a3d6a9acf8f06cf0bc9a4c732176",
+      "block": "88",
+      "gasUsed": "45909",
+      "status": "success",
+      "events": [
+        "Approval"
+      ]
+    },
+    {
+      "gate": "T03",
+      "step": "swap 1,000 collateral for base on Rooq pool",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0x8b909c85a13d1aa3a4309d6a6360004b5f9a1391389d38901da56ab276e0154c",
+      "block": "89",
+      "gasUsed": "154694",
+      "status": "success",
+      "events": [
+        "Transfer",
+        "Approval",
+        "Transfer",
+        "Transfer",
+        "ReservesUpdated",
+        "SwapExecuted"
+      ],
+      "detail": {
+        "quotedOut": "2643241365150694370",
+        "minOut": "2630025158324940898",
+        "reservesBefore": [
+          "20000000000",
+          "55640561969675894784"
+        ]
+      }
+    },
+    {
+      "gate": "T03",
+      "step": "pool invariant",
+      "detail": {
+        "kBefore": "1112811239393517895680000000000",
+        "kAfter": "1112943732695029208694000000000",
+        "nonDecreasing": true
+      }
+    },
+    {
+      "gate": "T03",
+      "step": "approve pool (base)",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0x42adeabe29c3181a1a4b2c09f346290eed643cfd867036cb8f2304d0670faaea",
+      "block": "90",
+      "gasUsed": "45981",
+      "status": "success",
+      "events": [
+        "Approval"
+      ]
+    },
+    {
+      "gate": "T03",
+      "step": "approve pool (quote)",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0xe4ab07a4e4414b52ddf30405040d801bc9caf7df185ac35a390153f9aff038ee",
+      "block": "91",
+      "gasUsed": "45933",
+      "status": "success",
+      "events": [
+        "Approval"
+      ]
+    },
+    {
+      "gate": "T03",
+      "step": "add liquidity, mint LP shares",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0xde8b48b5f66c7bef030085f9969a113a5c78aa7b9acfd346f1073b0ced54cb8d",
+      "block": "92",
+      "gasUsed": "107756",
+      "status": "success",
+      "events": [
+        "Transfer",
+        "Transfer",
+        "ReservesUpdated",
+        "Transfer",
+        "LiquidityAdded"
+      ]
+    },
+    {
+      "gate": "T03",
+      "step": "remove half the LP shares",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0xd1d4d9b77ba4d5f1d9e66d0d84973ea611256a4f4c7b103748e58d012b9c215d",
+      "block": "93",
+      "gasUsed": "82604",
+      "status": "success",
+      "events": [
+        "Transfer",
+        "ReservesUpdated",
+        "Transfer",
+        "Transfer",
+        "LiquidityRemoved"
+      ],
+      "detail": {
+        "shares": "26306536001852",
+        "lpBlock": "92"
+      }
+    },
+    {
+      "gate": "T04",
+      "step": "open 2x long via maker quote",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0xe06875d7ec136fe4ee8532c24411c6bb8d9178372c5e5a6debd0fa801ba925cb",
+      "block": "94",
+      "gasUsed": "437515",
+      "status": "success",
+      "events": [
+        "QuoteConsumed",
+        "Moved",
+        "MarginChanged",
+        "Moved",
+        "Moved",
+        "TradeExecuted",
+        "PositionChanged"
+      ],
+      "detail": {
+        "size": "11016831269995826957",
+        "quotePrice": "359809450000000000000",
+        "mark": "359450000000000000000",
+        "margin": "2000000000",
+        "nonce": "1794088474298000001"
+      }
+    },
+    {
+      "gate": "T04",
+      "step": "matched pair state",
+      "detail": {
+        "takerSize": "11016831269995826957",
+        "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "takerMargin": "2000000000",
+        "makerMargin": "1976040001",
+        "entry": "359809450000000000000"
+      }
+    },
+    {
+      "gate": "T07",
+      "step": "refresh feed after one hour",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0xa0663c1f10190f029d8a92eec4c356dbdd91f572582a74746f803755bc1851fc",
+      "block": "96",
+      "gasUsed": "35700",
+      "status": "success",
+      "events": [
+        "AnswerUpdated"
+      ],
+      "detail": {
+        "answer8": "35945000000"
+      }
+    },
+    {
+      "gate": "T07",
+      "step": "settle funding",
+      "actor": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "tx": "0xdd9b0f5b9511a8c001eef97c4cd0dd8f161a9d0605bb79921c8feeff8a687513",
+      "block": "97",
+      "gasUsed": "190384",
+      "status": "success",
+      "events": [
+        "FundingAccrued",
+        "Moved",
+        "FundingSettled",
+        "PositionChanged"
+      ]
+    },
+    {
+      "gate": "T07",
+      "step": "funding symmetry",
+      "detail": {
+        "takerPaid": "396000",
+        "makerReceived": "396000",
+        "zeroSum": true
+      }
+    },
+    {
+      "gate": "T06",
+      "step": "reduce long by half",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0x35ec4170624af270a43848f045f9517be8c951d2d21f13b19481289684dd8119",
+      "block": "98",
+      "gasUsed": "279269",
+      "status": "success",
+      "events": [
+        "QuoteConsumed",
+        "Moved",
+        "Moved",
+        "BackingChanged",
+        "Moved",
+        "TradeExecuted",
+        "PositionChanged"
+      ],
+      "detail": {
+        "size": "-5508415634997913478",
+        "quotePrice": "359090550000000000000",
+        "mark": "359450000000000000000",
+        "margin": "0",
+        "nonce": "1794088474330000002"
+      }
+    },
+    {
+      "gate": "T06",
+      "step": "close remaining long",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0x121e02af25c7307d6a671579fac7b0c090b120ea7c713447e51bfef1b9174731",
+      "block": "99",
+      "gasUsed": "233892",
+      "status": "success",
+      "events": [
+        "QuoteConsumed",
+        "Moved",
+        "Moved",
+        "MarginChanged",
+        "Moved",
+        "BackingChanged",
+        "Moved",
+        "TradeExecuted",
+        "PositionChanged"
+      ],
+      "detail": {
+        "size": "-5508415634997913479",
+        "quotePrice": "359090550000000000000",
+        "mark": "359450000000000000000",
+        "margin": "0",
+        "nonce": "1794088474343000003"
+      }
+    },
+    {
+      "gate": "T06",
+      "step": "withdraw all free collateral",
+      "actor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "tx": "0x0cc3d04968ddc2f0996f83e2287006b2a88725be907b7454bfa6345fc11b2726",
+      "block": "100",
+      "gasUsed": "47122",
+      "status": "success",
+      "events": [
+        "Transfer",
+        "Withdrawn"
+      ],
+      "detail": {
+        "withdrawn": "9986932000"
+      }
+    },
+    {
+      "gate": "T05",
+      "step": "faucet test collateral (mUSD)",
+      "actor": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+      "tx": "0x75ad3974885607249e5f259b2f0d9d8f26e14991d035cb721deaabb344d4b445",
+      "block": "101",
+      "gasUsed": "74521",
+      "status": "success",
+      "events": [
+        "Transfer"
+      ]
+    },
+    {
+      "gate": "T05",
+      "step": "approve exact amount to MarginVault",
+      "actor": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+      "tx": "0xcc02f9c8c8f79a5653dbe4532062e4c9c905877a556ecd62516d925fe61c955f",
+      "block": "102",
+      "gasUsed": "45933",
+      "status": "success",
+      "events": [
+        "Approval"
+      ]
+    },
+    {
+      "gate": "T05",
+      "step": "deposit collateral to MarginVault",
+      "actor": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+      "tx": "0xf04d0a77e25c9709dd41b9143c1dd4a5d74796aba3919e837a4f724b337d8163",
+      "block": "103",
+      "gasUsed": "67008",
+      "status": "success",
+      "events": [
+        "Transfer",
+        "Deposited"
+      ]
+    },
+    {
+      "gate": "T05",
+      "step": "open 2x short via maker quote",
+      "actor": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+      "tx": "0xdf4849cdfe2914fd2c9b3faf8511394518675afc56a94e6e83bedae3d8abb8a8",
+      "block": "104",
+      "gasUsed": "403783",
+      "status": "success",
+      "events": [
+        "QuoteConsumed",
+        "Moved",
+        "MarginChanged",
+        "Moved",
+        "Moved",
+        "TradeExecuted",
+        "PositionChanged"
+      ],
+      "detail": {
+        "size": "-11016831269995826957",
+        "quotePrice": "359090550000000000000",
+        "mark": "359450000000000000000",
+        "margin": "2000000000",
+        "nonce": "1794088474371000004"
+      }
+    },
+    {
+      "gate": "T08",
+      "step": "liquidation of healthy account rejected",
+      "detail": {
+        "result": "Error: NotLiquidatable()"
+      }
+    },
+    {
+      "gate": "T08",
+      "step": "controlled TEST oracle moves price +16%",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0x8ba66b3bb45ad1f538f06c3f5f4e43b29ed407ff1e38ccb48fd89b8f77276829",
+      "block": "105",
+      "gasUsed": "38500",
+      "status": "success",
+      "events": [
+        "AnswerUpdated"
+      ],
+      "detail": {
+        "answer8": "41696200000"
+      }
+    },
+    {
+      "gate": "T08",
+      "step": "PerpLens health after move",
+      "detail": {
+        "takerEquity": "1362440000",
+        "maintenance": "1607760000",
+        "liquidatable": true
+      }
+    },
+    {
+      "gate": "T08",
+      "step": "third-party liquidation",
+      "actor": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "tx": "0xb1e184e6e877cacdee5d59df3f2993fca4dd11e584d4592e8dd39ac4d102a00c",
+      "block": "106",
+      "gasUsed": "289021",
+      "status": "success",
+      "events": [
+        "FundingAccrued",
+        "Moved",
+        "FundingSettled",
+        "Moved",
+        "Moved",
+        "Moved",
+        "Moved",
+        "MarginChanged",
+        "Moved",
+        "BackingChanged",
+        "Liquidated",
+        "PositionChanged"
+      ]
+    },
+    {
+      "gate": "T08",
+      "step": "restore TEST oracle price",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0x23e3bce09208fc428f0948ca8df44e420040a2b84f691a44586e8eca2633951b",
+      "block": "107",
+      "gasUsed": "35700",
+      "status": "success",
+      "events": [
+        "AnswerUpdated"
+      ],
+      "detail": {
+        "answer8": "35945000000"
+      }
+    },
+    {
+      "gate": "T09",
+      "step": "preflight verdict for meme market",
+      "detail": {
+        "market": "mMEME",
+        "mask": "527",
+        "verdict": "NEEDS_FEED"
+      }
+    },
+    {
+      "gate": "T09",
+      "step": "activatePerps on unqualified market (expected revert)",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0x4a2ee240244de62c65bb811ded8f4d2be55191e28e4b44fbc1bf4bd24ea7bd1b",
+      "block": "108",
+      "gasUsed": "83415",
+      "status": "reverted",
+      "events": [],
+      "detail": {
+        "expectRevert": true
+      }
+    },
+    {
+      "gate": "T09",
+      "step": "meme market after rejected activation",
+      "detail": {
+        "spotStatus": 1,
+        "perpStatus": 0
+      }
+    },
+    {
+      "gate": "I-01",
+      "step": "conservation after trading",
+      "detail": {
+        "totalLedger": "55763068000",
+        "vaultTokenBalance": "55763068000",
+        "equal": true
+      }
+    },
+    {
+      "gate": "T12",
+      "step": "feed freshness after 3,601s without updates",
+      "detail": {
+        "market": "mAMZN",
+        "fresh": false
+      }
+    },
+    {
+      "gate": "T12",
+      "step": "permissionless triggerCloseOnly on stale feed",
+      "actor": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "tx": "0xcbb505888099f9429d5c6c2cdefba307576c1385e829d2b5b8a6ecce54fd302d",
+      "block": "110",
+      "gasUsed": "93122",
+      "status": "success",
+      "events": [
+        "StatusChanged"
+      ]
+    },
+    {
+      "gate": "T12",
+      "step": "market status",
+      "detail": {
+        "market": "mAMZN",
+        "perpStatus": "CLOSE_ONLY"
+      }
+    },
+    {
+      "gate": "T12",
+      "step": "refresh mTSLA feed",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0x88b5fb30008b502ad4ca54728ea5d724145168c6c86c0696a15f6c11de8e28bc",
+      "block": "111",
+      "gasUsed": "35700",
+      "status": "success",
+      "events": [
+        "AnswerUpdated"
+      ],
+      "detail": {
+        "answer8": "35945000000"
+      }
+    },
+    {
+      "gate": "T12",
+      "step": "refresh mAMZN feed",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0xc934812c33bd366a9bc50323750f17d2a588db2183a3534476b1e7fb06caca21",
+      "block": "112",
+      "gasUsed": "35700",
+      "status": "success",
+      "events": [
+        "AnswerUpdated"
+      ],
+      "detail": {
+        "answer8": "25985000000"
+      }
+    },
+    {
+      "gate": "T12",
+      "step": "refresh mPLTR feed",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0xfac844155a8fee944f89648917dcb6882568851636e08a43b518032b02b3e467",
+      "block": "113",
+      "gasUsed": "35700",
+      "status": "success",
+      "events": [
+        "AnswerUpdated"
+      ],
+      "detail": {
+        "answer8": "16330000000"
+      }
+    },
+    {
+      "gate": "T12",
+      "step": "refresh mNFLX feed",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0x7e30d009d53525dfa440437946f7bfaccdbe4f68524f950d4f4d6d455a4be7ae",
+      "block": "114",
+      "gasUsed": "35688",
+      "status": "success",
+      "events": [
+        "AnswerUpdated"
+      ],
+      "detail": {
+        "answer8": "6380000000"
+      }
+    },
+    {
+      "gate": "T12",
+      "step": "refresh mAMD feed",
+      "actor": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "tx": "0xfb0eaa18b4498c69739cfd8ae938a816096a5003a7ae01476790072ca6dfab22",
+      "block": "115",
+      "gasUsed": "35700",
+      "status": "success",
+      "events": [
+        "AnswerUpdated"
+      ],
+      "detail": {
+        "answer8": "45666500000"
+      }
+    },
+    {
+      "gate": "I-01",
+      "step": "conservation end",
+      "detail": {
+        "totalLedger": "55763068000",
+        "vaultTokenBalance": "55763068000",
+        "equal": true
+      }
+    }
+  ]
+}

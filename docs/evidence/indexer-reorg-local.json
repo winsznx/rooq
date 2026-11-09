@@ -1,0 +1,523 @@
+{
+  "drill": "reorg",
+  "ok": true,
+  "ranAt": "2026-11-07T18:54:53.002Z",
+  "env": "local",
+  "chainId": 31337,
+  "rpc": "http://127.0.0.1:8555",
+  "forkedFrom": "http://127.0.0.1:8545",
+  "schema": "drill_reorg",
+  "reducerVersion": 1,
+  "drillAccount": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+  "forkTip": {
+    "number": "157",
+    "hash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15"
+  },
+  "branchA": {
+    "txs": [
+      {
+        "step": "faucet 1000000000",
+        "hash": "0xfbf6ad7390831a21783263ffc62986278b49adbbf53a76c1766f502447ca3765",
+        "block": "158",
+        "status": "success",
+        "logs": 2
+      },
+      {
+        "step": "approve 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 600000000",
+        "hash": "0x868db8ffdae4e7bdd86b0e23d214353c28dfbe840dd1df84f1f23a329d178b01",
+        "block": "159",
+        "status": "success",
+        "logs": 1
+      },
+      {
+        "step": "deposit 600000000",
+        "hash": "0xd2dc4a2a4c07eee0ac370fa069987fad5f87acef6268f2dab3449628aeb8cacd",
+        "block": "160",
+        "status": "success",
+        "logs": 2
+      },
+      {
+        "step": "approve 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 100000000",
+        "hash": "0x6885f5b62b53f7fb476305fb7e5a70c153170e1c2c157535c403d422f4402ca7",
+        "block": "161",
+        "status": "success",
+        "logs": 1
+      },
+      {
+        "step": "swap 100000000 collateral for mTSLA",
+        "hash": "0x40694cdc1195beba1ff9de17672e818a723598033cea045be2668845a28861e2",
+        "block": "162",
+        "status": "success",
+        "logs": 6
+      }
+    ],
+    "blocks": [
+      {
+        "number": "158",
+        "hash": "0xb014781e3f47f4f4d08886b5bf64153fa9f1d563802a53ad3fbbdf5ca585baf1"
+      },
+      {
+        "number": "159",
+        "hash": "0x8e8081c477989436754ec582e5e1c324ef8a6a42c1e1650308eea4dc1571e70b"
+      },
+      {
+        "number": "160",
+        "hash": "0x8ce245c8fc8fd60c788d5a524063668c4e2f311dd7e28f80700c011e0c520a09"
+      },
+      {
+        "number": "161",
+        "hash": "0xb4a195d19c3a62999dd9d24676bd3e738b95adb5574f82404aa0da8b44e1dfd1"
+      },
+      {
+        "number": "162",
+        "hash": "0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2"
+      }
+    ]
+  },
+  "revert": {
+    "snapshotId": "0x0",
+    "reverted": true,
+    "headAfterRevert": "157"
+  },
+  "branchB": {
+    "txs": [
+      {
+        "step": "faucet 800000000",
+        "hash": "0x87d545681bdbacbffe831105fee9639f662cba7682c3bd6c37feb95e58bf5647",
+        "block": "158",
+        "status": "success",
+        "logs": 2
+      },
+      {
+        "step": "approve 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 250000000",
+        "hash": "0x68d94bfb5a6bbf89ba74cfc06af2e2dd4a32587e6dfb134158567d2c20713536",
+        "block": "159",
+        "status": "success",
+        "logs": 1
+      },
+      {
+        "step": "deposit 250000000",
+        "hash": "0xd92bc3bfa62847a0cd0dc2f60baa467a5e5af718800229580fecd2b4ea1bc2de",
+        "block": "160",
+        "status": "success",
+        "logs": 2
+      }
+    ],
+    "head": {
+      "number": "163",
+      "hash": "0xcc4183eaced75ff00158c442d4f8e2dde4da174cf0eb97e63bdc39199a887fd7"
+    },
+    "blocks": [
+      {
+        "number": "158",
+        "hash": "0xb0ae6b6fdf9b4c480df416f131d03d3eeee7aa46b684ec0472890f6d9058c906"
+      },
+      {
+        "number": "159",
+        "hash": "0x35385009f06488c2fed7e1894ed0982a4341042a0d56da36144bbf11305a0c43"
+      },
+      {
+        "number": "160",
+        "hash": "0x5429e2ee5d270b4d4beeaeec38f6df1a6e3cf3239c3d45ba099b81683fc14ec1"
+      },
+      {
+        "number": "161",
+        "hash": "0x23f8d89a030208bffc72feb26ecb808b1e3dce783888a574eac280d77c33c66e"
+      },
+      {
+        "number": "162",
+        "hash": "0xd0294199dfb88477a0e37681dfd165895f12f8e8e06cf7f184d7c51e296e8dff"
+      },
+      {
+        "number": "163",
+        "hash": "0xcc4183eaced75ff00158c442d4f8e2dde4da174cf0eb97e63bdc39199a887fd7"
+      }
+    ]
+  },
+  "reorg": {
+    "commonAncestor": "157",
+    "ancestorHash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15",
+    "oldHead": "162",
+    "oldHeadHash": "0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2",
+    "newHead": "163",
+    "depth": 5,
+    "orphanedBlocks": 5,
+    "orphanedEvents": 3
+  },
+  "reorgRows": [
+    {
+      "common_ancestor": "157",
+      "depth": 5,
+      "orphaned_blocks": 5,
+      "orphaned_events": 3
+    }
+  ],
+  "rawEvents": {
+    "branchA": [
+      {
+        "block_number": "160",
+        "block_hash": "0x8ce245c8fc8fd60c788d5a524063668c4e2f311dd7e28f80700c011e0c520a09",
+        "tx_hash": "0xd2dc4a2a4c07eee0ac370fa069987fad5f87acef6268f2dab3449628aeb8cacd",
+        "log_index": 1,
+        "event_name": "Deposited",
+        "canonical": false
+      }
+    ],
+    "branchB": [
+      {
+        "block_number": "160",
+        "block_hash": "0x5429e2ee5d270b4d4beeaeec38f6df1a6e3cf3239c3d45ba099b81683fc14ec1",
+        "tx_hash": "0xd92bc3bfa62847a0cd0dc2f60baa467a5e5af718800229580fecd2b4ea1bc2de",
+        "log_index": 1,
+        "event_name": "Deposited",
+        "canonical": true
+      }
+    ]
+  },
+  "vaultMovements": [
+    {
+      "tx_hash": "0xd92bc3bfa62847a0cd0dc2f60baa467a5e5af718800229580fecd2b4ea1bc2de",
+      "amount": "250000000",
+      "account": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc"
+    }
+  ],
+  "tombstones": [
+    {
+      "type": "pool.swap",
+      "block_number": "162",
+      "block_hash": "0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2",
+      "tx_hash": "0x40694cdc1195beba1ff9de17672e818a723598033cea045be2668845a28861e2",
+      "event_id": "31337:0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2:5"
+    }
+  ],
+  "derived": {
+    "incremental": {
+      "tables": {
+        "markets": {
+          "rows": 7,
+          "sha256": "6add19f617a42633189b052cec25a2be02edfd54b371cab971b5420afed61d15"
+        },
+        "positions": {
+          "rows": 2,
+          "sha256": "86db356c1a847f6b7191497c03e9522af37f5655bdb1019f406e58e6dd5136fb"
+        },
+        "pools": {
+          "rows": 7,
+          "sha256": "505fd418eb40c273c23f7b27be722b781eaf6e52303f30ff7368cbd6bbc9e9e4"
+        },
+        "lp_balances": {
+          "rows": 15,
+          "sha256": "87143407665828d8580a5850d04a7d80a54f373f6e73bf81501848f533a5de1b"
+        },
+        "vault_balances": {
+          "rows": 22,
+          "sha256": "1cbf41366e33b5560cf5d0c8a6af3a400b65b5851460cd60dfa3353187846dde"
+        },
+        "vault_state": {
+          "rows": 1,
+          "sha256": "8d19a8f94d739e88a31ecae58bdcb4d4f53657ba1a43c4e437b779a95b83d186"
+        },
+        "feeds": {
+          "rows": 5,
+          "sha256": "d0116c9f672dd6415be8317c0ddeb9243270620e2a3f566baf1ff1b586a7fd88"
+        },
+        "trades": {
+          "rows": 14,
+          "sha256": "958b1cfa8443910d4a374c3be258538197ee4a4abf3163dff136f0495253b433"
+        },
+        "position_events": {
+          "rows": 15,
+          "sha256": "8db4f4f2e6a6985b16a604c4efa89e316f13dfca0f76b275abfc80bf7ff083f5"
+        },
+        "funding_events": {
+          "rows": 14,
+          "sha256": "4a226a24fe9bcf40f75d76c4524375900c45db10d425c7a573c36f1a77b44e86"
+        },
+        "liquidations": {
+          "rows": 1,
+          "sha256": "f5b6e1b0b8c73e44fd397612ddc8e0acbe37284a049453088d156821c51bed62"
+        },
+        "pool_events": {
+          "rows": 20,
+          "sha256": "649630b1b7dc6b52a55d7037074b48fa5a43ebdd57755021a554ff895daeff4a"
+        },
+        "vault_movements": {
+          "rows": 20,
+          "sha256": "35dfef3a85abc641e73946f6d0a911a1e2a24004606d06073cca3b4aa6c1bf2c"
+        },
+        "oracle_observations": {
+          "rows": 28,
+          "sha256": "ec675329aa3342df721c101c70980696e679a1f27530c7605ed5e3f42ff25976"
+        },
+        "market_status_events": {
+          "rows": 11,
+          "sha256": "7bbf2a02cffb020231a9be37ab5e622ad99521ff9cd91a4bc381eeabedc0385b"
+        }
+      },
+      "sha256": "ddbb81b48533b1611aff2242aeb79788630292e01f3165fe16db84413679cf34"
+    },
+    "replay": {
+      "before": "ddbb81b48533b1611aff2242aeb79788630292e01f3165fe16db84413679cf34",
+      "after": "ddbb81b48533b1611aff2242aeb79788630292e01f3165fe16db84413679cf34",
+      "identical": true,
+      "events": 286
+    }
+  },
+  "reconciliation": {
+    "blockNumber": "163",
+    "ok": true,
+    "checks": 133,
+    "mismatches": [],
+    "counts": {
+      "vault": 2,
+      "market": 64,
+      "pair": 12,
+      "pool": 42,
+      "ledger": 13
+    },
+    "vaultSurplus": "0",
+    "truncated": false
+  },
+  "indexerStatus": {
+    "status": "ok",
+    "reason": null,
+    "last_indexed_block": "163",
+    "last_indexed_hash": "0xcc4183eaced75ff00158c442d4f8e2dde4da174cf0eb97e63bdc39199a887fd7"
+  },
+  "assertions": [
+    {
+      "name": "branch A was indexed before the reorg",
+      "ok": true,
+      "detail": {
+        "blocks": [
+          {
+            "number": "158",
+            "hash": "0xb014781e3f47f4f4d08886b5bf64153fa9f1d563802a53ad3fbbdf5ca585baf1",
+            "canonical": true
+          },
+          {
+            "number": "159",
+            "hash": "0x8e8081c477989436754ec582e5e1c324ef8a6a42c1e1650308eea4dc1571e70b",
+            "canonical": true
+          },
+          {
+            "number": "160",
+            "hash": "0x8ce245c8fc8fd60c788d5a524063668c4e2f311dd7e28f80700c011e0c520a09",
+            "canonical": true
+          },
+          {
+            "number": "161",
+            "hash": "0xb4a195d19c3a62999dd9d24676bd3e738b95adb5574f82404aa0da8b44e1dfd1",
+            "canonical": true
+          },
+          {
+            "number": "162",
+            "hash": "0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2",
+            "canonical": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "evm_revert rewound the fork to its tip",
+      "ok": true,
+      "detail": {
+        "reverted": true,
+        "afterRevert": "157",
+        "tip": "157"
+      }
+    },
+    {
+      "name": "reorg detected with the fork tip as common ancestor",
+      "ok": true,
+      "detail": {
+        "reorg": {
+          "commonAncestor": "157",
+          "ancestorHash": "0xafece4f6190d52c4ed3a3cea3e7986dcdcd039e4c5f9d106f3437876382c7d15",
+          "oldHead": "162",
+          "oldHeadHash": "0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2",
+          "newHead": "163",
+          "depth": 5,
+          "orphanedBlocks": 5,
+          "orphanedEvents": 3
+        }
+      }
+    },
+    {
+      "name": "every branch A block row is now non-canonical",
+      "ok": true,
+      "detail": {
+        "orphanedA": [
+          {
+            "number": "158",
+            "hash": "0xb014781e3f47f4f4d08886b5bf64153fa9f1d563802a53ad3fbbdf5ca585baf1",
+            "canonical": false
+          },
+          {
+            "number": "159",
+            "hash": "0x8e8081c477989436754ec582e5e1c324ef8a6a42c1e1650308eea4dc1571e70b",
+            "canonical": false
+          },
+          {
+            "number": "160",
+            "hash": "0x8ce245c8fc8fd60c788d5a524063668c4e2f311dd7e28f80700c011e0c520a09",
+            "canonical": false
+          },
+          {
+            "number": "161",
+            "hash": "0xb4a195d19c3a62999dd9d24676bd3e738b95adb5574f82404aa0da8b44e1dfd1",
+            "canonical": false
+          },
+          {
+            "number": "162",
+            "hash": "0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2",
+            "canonical": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "branch A deposit events are non-canonical",
+      "ok": true,
+      "detail": {
+        "eventsA": [
+          {
+            "block_number": "160",
+            "block_hash": "0x8ce245c8fc8fd60c788d5a524063668c4e2f311dd7e28f80700c011e0c520a09",
+            "tx_hash": "0xd2dc4a2a4c07eee0ac370fa069987fad5f87acef6268f2dab3449628aeb8cacd",
+            "log_index": 1,
+            "event_name": "Deposited",
+            "canonical": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "branch B blocks are canonical and match the node",
+      "ok": true,
+      "detail": {
+        "canonicalB": [
+          {
+            "number": "158",
+            "hash": "0xb0ae6b6fdf9b4c480df416f131d03d3eeee7aa46b684ec0472890f6d9058c906",
+            "canonical": true
+          },
+          {
+            "number": "159",
+            "hash": "0x35385009f06488c2fed7e1894ed0982a4341042a0d56da36144bbf11305a0c43",
+            "canonical": true
+          },
+          {
+            "number": "160",
+            "hash": "0x5429e2ee5d270b4d4beeaeec38f6df1a6e3cf3239c3d45ba099b81683fc14ec1",
+            "canonical": true
+          },
+          {
+            "number": "161",
+            "hash": "0x23f8d89a030208bffc72feb26ecb808b1e3dce783888a574eac280d77c33c66e",
+            "canonical": true
+          },
+          {
+            "number": "162",
+            "hash": "0xd0294199dfb88477a0e37681dfd165895f12f8e8e06cf7f184d7c51e296e8dff",
+            "canonical": true
+          },
+          {
+            "number": "163",
+            "hash": "0xcc4183eaced75ff00158c442d4f8e2dde4da174cf0eb97e63bdc39199a887fd7",
+            "canonical": true
+          }
+        ],
+        "nodeHashes": [
+          "0xb0ae6b6fdf9b4c480df416f131d03d3eeee7aa46b684ec0472890f6d9058c906",
+          "0x35385009f06488c2fed7e1894ed0982a4341042a0d56da36144bbf11305a0c43",
+          "0x5429e2ee5d270b4d4beeaeec38f6df1a6e3cf3239c3d45ba099b81683fc14ec1",
+          "0x23f8d89a030208bffc72feb26ecb808b1e3dce783888a574eac280d77c33c66e",
+          "0xd0294199dfb88477a0e37681dfd165895f12f8e8e06cf7f184d7c51e296e8dff",
+          "0xcc4183eaced75ff00158c442d4f8e2dde4da174cf0eb97e63bdc39199a887fd7"
+        ]
+      }
+    },
+    {
+      "name": "branch B deposit events are canonical",
+      "ok": true,
+      "detail": {
+        "eventsB": [
+          {
+            "block_number": "160",
+            "block_hash": "0x5429e2ee5d270b4d4beeaeec38f6df1a6e3cf3239c3d45ba099b81683fc14ec1",
+            "tx_hash": "0xd92bc3bfa62847a0cd0dc2f60baa467a5e5af718800229580fecd2b4ea1bc2de",
+            "log_index": 1,
+            "event_name": "Deposited",
+            "canonical": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "derived vault movements contain only the branch B deposit",
+      "ok": true,
+      "detail": {
+        "movements": [
+          {
+            "tx_hash": "0xd92bc3bfa62847a0cd0dc2f60baa467a5e5af718800229580fecd2b4ea1bc2de",
+            "amount": "250000000",
+            "account": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc"
+          }
+        ]
+      }
+    },
+    {
+      "name": "stream carries a reverted tombstone for the branch A swap",
+      "ok": true,
+      "detail": {
+        "tombstones": [
+          {
+            "type": "pool.swap",
+            "block_number": "162",
+            "block_hash": "0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2",
+            "tx_hash": "0x40694cdc1195beba1ff9de17672e818a723598033cea045be2668845a28861e2",
+            "event_id": "31337:0xc6be26e86203767d6a8ccbdf6011d45b993d4a90c5b8c77f3b464a2d01ce0ab2:5"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the branch A swap is gone from derived trades",
+      "ok": true,
+      "detail": {
+        "tradesA": []
+      }
+    },
+    {
+      "name": "incremental derived state equals a fresh replay",
+      "ok": true,
+      "detail": {
+        "incremental": "ddbb81b48533b1611aff2242aeb79788630292e01f3165fe16db84413679cf34",
+        "replayBefore": "ddbb81b48533b1611aff2242aeb79788630292e01f3165fe16db84413679cf34",
+        "replayAfter": "ddbb81b48533b1611aff2242aeb79788630292e01f3165fe16db84413679cf34"
+      }
+    },
+    {
+      "name": "reconciliation at the new head passes",
+      "ok": true,
+      "detail": {
+        "block": "163",
+        "checks": 133,
+        "mismatches": []
+      }
+    },
+    {
+      "name": "indexer status is ok at the new head",
+      "ok": true,
+      "detail": {
+        "status": {
+          "status": "ok",
+          "reason": null,
+          "last_indexed_block": "163",
+          "last_indexed_hash": "0xcc4183eaced75ff00158c442d4f8e2dde4da174cf0eb97e63bdc39199a887fd7"
+        }
+      }
+    }
+  ]
+}
