@@ -1,4 +1,4 @@
-import { MerkleTree, type Point, type ShieldedDeposit } from "@rooq/private-sdk";
+import type { MerkleTree, Point, ShieldedDeposit } from "@rooq/private-sdk";
 import { createPublicClient, erc20Abi, http, keccak256, parseAbi, parseAbiItem, toBytes, type Address, type Hex, type PublicClient } from "viem";
 import { PRIVATE_READ_URL, PRIVATE_RELAYER_URL, PRIVATE_RPC_URL } from "./config";
 import { MARKETS_ABI } from "./chain-state-abi";
@@ -90,8 +90,33 @@ export class ServiceDown extends Error {
   }
 }
 
-const LOG_CHUNK = 2_000n;
+/** Blocks per log request. Robinhood Chain makes about 500,000 blocks a day, so small ranges make the first load slow. */
+const LOG_SPAN = 500_000n;
+const MIN_LOG_SPAN = 2_000n;
+/** The chart needs about a day of oracle updates, not every update since deployment. */
+const PRICE_LOOKBACK_BLOCKS = 600_000n;
 const RPC_SOURCE = "rpc";
+
+/**
+ * Reads logs from `from` to `head` in large ranges, halving a range the RPC refuses. Returns the next block to read.
+ * Logs are applied one whole range at a time, so a failure never leaves a range half read.
+ */
+async function scanLogs(from: bigint, head: bigint, read: (fromBlock: bigint, toBlock: bigint) => Promise<void>): Promise<bigint> {
+  let span = LOG_SPAN;
+  let next = from;
+  while (next <= head) {
+    const to = next + span - 1n > head ? head : next + span - 1n;
+    try {
+      await read(next, to);
+    } catch (error) {
+      if (span <= MIN_LOG_SPAN) throw error;
+      span /= 2n;
+      continue;
+    }
+    next = to + 1n;
+  }
+  return next;
+}
 
 export interface OperatorKeys {
   readonly coordinator: Point;
@@ -124,9 +149,26 @@ async function pageAll<T>(path: string, from: number): Promise<{ items: T[]; nex
 
 /**
  * Public chain data as this wallet sees it. Every lookup is a paged read of everything, so neither the read API nor the
- * RPC learns which leaf, nullifier or exit this wallet cares about. Spent status and exits come from the chain's own
- * logs; asking the read API by nullifier would hand it the wallet's nullifiers before they are public.
+ * RPC learns which leaf, nullifier or exit this wallet cares about. Spent status, exits and prices come from the read
+ * API's `/v1/public`, which serves every visitor the same public log data in one request; the chain's own logs are the
+ * fallback when it can't answer. Asking the read API by nullifier would hand it the wallet's nullifiers, so nothing does.
  */
+
+interface PublicSnapshot {
+  readonly head: string;
+  readonly headTime: string | null;
+  readonly nextFrom: string;
+  readonly tokens: readonly { address: Address; symbol: string; name: string; decimals: number }[];
+  readonly spent: readonly { nullifier: Hex; block: string; tx: Hex }[];
+  readonly exits: readonly { nullifier: Hex; matureAt: string }[];
+  readonly ends: readonly { nullifier: Hex; kind: "closed" | "liquidated"; mark: string; mode: string | null; block: string; tx: Hex }[];
+  readonly unshields: readonly { asset: Hex; recipient: Hex; amount: string; block: string; tx: Hex }[];
+  readonly prices: Readonly<Record<string, readonly PricePoint[]>>;
+}
+
+const PRICE_POINTS_KEPT = 2_000;
+/** Tiers and creatable feeds change only by governance, so they're read at most this often. */
+const CREATE_INFO_MS = 60_000;
 export class ChainState {
   deployment: Deployment | null = null;
   tokens = new Map<string, TokenInfo>();
@@ -139,7 +181,12 @@ export class ChainState {
   relayerFeeAddress: { auth: bigint; pk: Point } | null = null;
   records: RecordRow[] = [];
   deposits: (ShieldedDeposit & { block: bigint })[] = [];
-  tree = new MerkleTree();
+  private treeState: MerkleTree | null = null;
+  /** Built on first account sync: the tree hashes its empty levels, which needs the proving engine loaded. */
+  get tree(): MerkleTree {
+    if (!this.treeState) throw new Error("note tree used before the account synced");
+    return this.treeState;
+  }
   processed = 0;
   queueLength = 0;
   root: Hex | null = null;
@@ -159,11 +206,53 @@ export class ChainState {
   private blockTimes = new Map<bigint, bigint>();
   relayerDown = false;
   private priceLogs = new Map<bigint, { from: bigint; points: PricePoint[] }>();
+  private pricesSince = 0;
+  private publicLoaded = false;
+  private createLoadedAt = 0;
+
+  /** One read-API request for the public data a page needs. False when the API can't answer, so the caller reads the chain. */
+  private async loadPublic(): Promise<boolean> {
+    let p: PublicSnapshot;
+    try {
+      p = await readJson<PublicSnapshot>(`/v1/public?from=${this.logsFrom ?? 0n}&pricesSince=${this.pricesSince}`);
+    } catch (error) {
+      if (!(error instanceof ServiceDown)) throw error;
+      this.publicLoaded = false;
+      return false;
+    }
+    // A read API that is still catching up after a restart has no block time yet: report it, so the caller reads the head from chain.
+    if (p.headTime === null) {
+      this.publicLoaded = false;
+      return false;
+    }
+    this.head = BigInt(p.head);
+    this.chainNow = BigInt(p.headTime);
+    for (const t of p.tokens) {
+      if (this.tokens.has(t.address.toLowerCase())) continue;
+      const shown = FIXTURE_DISPLAY[t.symbol];
+      this.tokens.set(t.address.toLowerCase(), { address: t.address, decimals: t.decimals, symbol: shown?.symbol ?? t.symbol, name: shown?.name ?? t.name });
+    }
+    for (const e of p.spent) this.spent.set(e.nullifier.toLowerCase(), { block: BigInt(e.block), tx: e.tx });
+    for (const e of p.exits) this.exits.set(e.nullifier.toLowerCase(), BigInt(e.matureAt));
+    for (const e of p.ends) this.ends.set(e.nullifier.toLowerCase(), { block: BigInt(e.block), tx: e.tx, kind: e.kind, mark: BigInt(e.mark), mode: e.mode === null ? null : BigInt(e.mode) });
+    for (const e of p.unshields) this.unshields.push({ block: BigInt(e.block), tx: e.tx, asset: e.asset, recipient: e.recipient, amount: BigInt(e.amount) });
+    for (const [id, points] of Object.entries(p.prices)) {
+      const row = this.priceLogs.get(BigInt(id)) ?? { from: 0n, points: [] };
+      row.points.push(...points);
+      if (row.points.length > PRICE_POINTS_KEPT) row.points.splice(0, row.points.length - PRICE_POINTS_KEPT);
+      this.priceLogs.set(BigInt(id), row);
+      const last = points.at(-1);
+      if (last && last.time > this.pricesSince) this.pricesSince = last.time;
+    }
+    this.logsFrom = BigInt(p.nextFrom);
+    this.publicLoaded = true;
+    return true;
+  }
 
   private reset(): void {
     this.records = [];
     this.deposits = [];
-    this.tree = new MerkleTree();
+    this.treeState = null;
     this.recordsFrom = 0;
     this.depositsFrom = 0;
     this.logsFrom = null;
@@ -256,6 +345,10 @@ export class ChainState {
     const client = this.client;
     let registry: Address;
     try {
+      if (this.create && Date.now() - this.createLoadedAt < CREATE_INFO_MS) {
+        await this.addCreatedMarkets(this.create.module);
+        return;
+      }
       registry = await client.readContract({ address: d.pool, abi: POOL_READS, functionName: "marketsModule" });
       if (BigInt(registry) === 0n) return;
       const count = await client.readContract({ address: registry, abi: MARKETS_ABI, functionName: "tierCount" });
@@ -267,15 +360,25 @@ export class ChainState {
         return { id, label: name.split(":").at(-1) ?? name, approved, taken };
       }));
       this.create = { module: registry, tiers: tiers.map((t, i) => ({ id: i, ...t })), feeds, collateral: d.asset };
-      const head = await client.getBlockNumber({ cacheTime: 0 });
-      let from = this.marketsFrom ?? d.startBlock;
-      while (from <= head) {
-        const to = from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n;
-        const logs = await client.getLogs({ address: registry, event: CREATED_EVENT, fromBlock: from, toBlock: to });
+      this.createLoadedAt = Date.now();
+      await this.addCreatedMarkets(registry);
+    } catch (error) {
+      throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "market registry unavailable");
+    }
+  }
+
+  /** Markets created after deployment, found from their events and read once each. */
+  private async addCreatedMarkets(registry: Address): Promise<void> {
+    const d = this.deployment!;
+    const client = this.client;
+    try {
+      const head = this.head ?? (await client.getBlockNumber({ cacheTime: 0 }));
+      this.marketsFrom = await scanLogs(this.marketsFrom ?? d.startBlock, head, async (fromBlock, toBlock) => {
+        const logs = await client.getLogs({ address: registry, event: CREATED_EVENT, fromBlock, toBlock });
         for (const l of logs) this.createdMarkets.push({ id: l.args.market!, feedId: l.args.feedId! });
-        from = to + 1n;
-      }
-      this.marketsFrom = from;
+      });
+      if (this.createdMarkets.length === 0) return;
+      const oracle = await client.readContract({ address: d.pool, abi: POOL_READS, functionName: "oracle" });
       for (const c of this.createdMarkets) {
         if (this.markets.some((m) => m.id === c.id)) continue;
         const [m, f, price] = await Promise.all([client.readContract({ address: d.pool, abi: POOL_READS, functionName: "market", args: [c.id] }), client.readContract({ address: d.pool, abi: POOL_READS, functionName: "funding", args: [c.id] }), client.readContract({ address: oracle, abi: ORACLE_READS, functionName: "getPrice", args: [c.feedId] })]);
@@ -293,36 +396,43 @@ export class ChainState {
   private async loadPriceHistory(): Promise<void> {
     const d = this.deployment!;
     const client = this.client;
+    if (this.publicLoaded) {
+      this.markets = this.markets.map((m) => this.withHistory(m, this.priceLogs.get(m.id)?.points ?? []));
+      return;
+    }
     try {
       const oracle = await client.readContract({ address: d.pool, abi: POOL_READS, functionName: "oracle" });
       const head = await client.getBlockNumber({ cacheTime: 0 });
       this.markets = await Promise.all(this.markets.map(async (m) => {
-        const row = this.priceLogs.get(m.id) ?? { from: d.startBlock, points: [] as PricePoint[] };
+        const recent = head > PRICE_LOOKBACK_BLOCKS ? head - PRICE_LOOKBACK_BLOCKS : 0n;
+        const row = this.priceLogs.get(m.id) ?? { from: d.startBlock > recent ? d.startBlock : recent, points: [] as PricePoint[] };
         const feed = await client.readContract({ address: oracle, abi: ORACLE_READS, functionName: "feedConfig", args: [m.feedId] }).catch(() => null);
         const decimals = feed ? await client.readContract({ address: feed, abi: FEED_ABI, functionName: "decimals" }) : 8;
         if (feed) {
-          for (let from = row.from; from <= head; ) {
-            const to = from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n;
-            const logs = await client.getLogs({ address: feed, event: ANSWER_EVENT, fromBlock: from, toBlock: to });
+          row.from = await scanLogs(row.from, head, async (fromBlock, toBlock) => {
+            const logs = await client.getLogs({ address: feed, event: ANSWER_EVENT, fromBlock, toBlock });
             for (const l of logs) row.points.push({ time: Number(l.args.updatedAt), price: Number(l.args.current) / 10 ** decimals });
-            from = to + 1n;
-          }
-          row.from = head + 1n;
+          });
           this.priceLogs.set(m.id, row);
         }
-        const byTime = new Map(row.points.map((p) => [p.time, p]));
-        for (const e of this.funding.get(m.id) ?? []) byTime.set(e.asOf, { time: e.asOf, price: Number(e.mark) / 1e18 });
-        if (m.mark !== null && this.chainNow !== null) byTime.set(Number(this.chainNow), { time: Number(this.chainNow), price: Number(m.mark) / 1e18 });
-        const history = [...byTime.values()].sort((a, b) => a.time - b.time).slice(-1000);
-        const epochs = this.funding.get(m.id) ?? [];
-        const last = epochs.at(-1);
-        const prev = epochs.at(-2)?.index ?? m.fundingIndex;
-        const fundingPerSecondWad = last && last.dt > 0n && last.mark > 0n ? ((last.index - (epochs.length > 1 ? prev : FUNDING_INDEX_ZERO)) * 10n ** 18n) / last.mark / last.dt : null;
-        return { ...m, history, fundingPerSecondWad };
+        return this.withHistory(m, row.points);
       }));
     } catch (error) {
       throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "price history unavailable");
     }
+  }
+
+  /** The chart line and the funding rate, from oracle points, funding epochs and the current mark. */
+  private withHistory(m: MarketView, points: readonly PricePoint[]): MarketView {
+    const byTime = new Map(points.map((p) => [p.time, p]));
+    for (const e of this.funding.get(m.id) ?? []) byTime.set(e.asOf, { time: e.asOf, price: Number(e.mark) / 1e18 });
+    if (m.mark !== null && this.chainNow !== null) byTime.set(Number(this.chainNow), { time: Number(this.chainNow), price: Number(m.mark) / 1e18 });
+    const history = [...byTime.values()].sort((a, b) => a.time - b.time).slice(-1000);
+    const epochs = this.funding.get(m.id) ?? [];
+    const last = epochs.at(-1);
+    const prev = epochs.at(-2)?.index ?? m.fundingIndex;
+    const fundingPerSecondWad = last && last.dt > 0n && last.mark > 0n ? ((last.index - (epochs.length > 1 ? prev : FUNDING_INDEX_ZERO)) * 10n ** 18n) / last.mark / last.dt : null;
+    return { ...m, history, fundingPerSecondWad };
   }
 
   private async loadRelayer(): Promise<void> {
@@ -332,6 +442,10 @@ export class ChainState {
   }
 
   private async syncTree(): Promise<void> {
+    if (!this.treeState) {
+      const { MerkleTree } = await import("@rooq/private-sdk");
+      this.treeState = new MerkleTree();
+    }
     for (;;) {
       const page = await readJson<{ leaves: Hex[]; processed: number; root: Hex }>(`/v1/tree/leaves?from=${this.tree.size}&limit=512`);
       for (const leaf of page.leaves) this.tree.insert(BigInt(leaf));
@@ -344,15 +458,14 @@ export class ChainState {
   }
 
   private async syncLogs(): Promise<void> {
+    if (await this.loadPublic()) return;
     const d = this.deployment!;
     const head = await this.client.getBlockNumber({ cacheTime: 0 });
     const block = await this.client.getBlock({ blockNumber: head });
     this.head = head;
     this.chainNow = block.timestamp;
-    let from = this.logsFrom ?? d.startBlock;
-    while (from <= head) {
-      const to = from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n;
-      const logs = await this.client.getLogs({ address: d.pool, events: POOL_EVENTS, fromBlock: from, toBlock: to });
+    this.logsFrom = await scanLogs(this.logsFrom ?? d.startBlock, head, async (fromBlock, toBlock) => {
+      const logs = await this.client.getLogs({ address: d.pool, events: POOL_EVENTS, fromBlock, toBlock });
       for (const l of logs) {
         const at = { block: l.blockNumber, tx: l.transactionHash };
         if (l.eventName === "NullifiersSpent" || l.eventName === "RecordsConsumed") {
@@ -367,9 +480,7 @@ export class ChainState {
           this.unshields.push({ ...at, asset: l.args.asset!, recipient: l.args.recipient!, amount: l.args.amount! });
         }
       }
-      from = to + 1n;
-    }
-    this.logsFrom = from;
+    });
   }
 
   /** What anyone can see with no account: market prices, pools and the current head. Pages no private data. */
@@ -379,12 +490,15 @@ export class ChainState {
     this.queueLength = s.queueLength;
     this.processed = s.processed;
     this.root = s.root;
+    const fromApi = await this.loadPublic();
     await this.loadDeployment();
-    try {
-      this.head = await this.client.getBlockNumber({ cacheTime: 0 });
-      this.chainNow = (await this.client.getBlock({ blockNumber: this.head })).timestamp;
-    } catch (error) {
-      throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "head unavailable");
+    if (!fromApi) {
+      try {
+        this.head = await this.client.getBlockNumber({ cacheTime: 0 });
+        this.chainNow = (await this.client.getBlock({ blockNumber: this.head })).timestamp;
+      } catch (error) {
+        throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "head unavailable");
+      }
     }
     await this.loadMarkets();
     await this.loadRelayerStatus();
@@ -396,6 +510,7 @@ export class ChainState {
     this.reorgsSeen = s.reorgs;
     this.syncedBlock = s.syncedBlock === null ? null : BigInt(s.syncedBlock);
     this.queueLength = s.queueLength;
+    if (this.tokens.size === 0) await this.loadPublic();
     await this.loadDeployment();
     const records = await pageAll<{ leafIndex: number; kind: number; commitment: Hex; ciphertext: Hex[]; block: string }>("/v1/records", this.recordsFrom);
     for (const r of records.items) this.records.push({ leafIndex: r.leafIndex, kind: r.kind, commitment: BigInt(r.commitment), ciphertext: r.ciphertext.map(BigInt), block: BigInt(r.block) });

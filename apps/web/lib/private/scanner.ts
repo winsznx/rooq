@@ -256,16 +256,7 @@ function fundingHistory(chain: ChainState, h: HeldPosition): FundingEntry[] {
 }
 
 /** The market data anyone can see, with no account open. */
-export function buildPublicView(chain: ChainState, error: string | null): PrivateView {
-  const dep = chain.deployment!;
-  const assets = [...new Set([dep.asset.toLowerCase(), ...chain.pools.flatMap((p) => [p.token0.toLowerCase(), p.token1.toLowerCase()])])];
-  return {
-    unlocked: false,
-    sync: { syncedBlock: chain.syncedBlock, head: chain.head, processed: chain.processed, queueLength: chain.queueLength, root: chain.root, updatedAt: Date.now(), error },
-    chainNow: chain.chainNow, health: { readApi: true, relayer: !chain.relayerDown, rpc: true }, tokens: [...chain.tokens.values()], markets: chain.markets, pools: chain.pools, create: chain.create, exitBond: dep.exitBond, pool: dep.pool, relayerFee: chain.relayerFees,
-    address: "", balances: assets.map((a) => ({ asset: a as Hex, free: 0n, arriving: 0n, largestSpendable: 0n, noteCount: 0 })), locks: [], positions: [], claims: [], lp: [], activity: [],
-  };
-}
+export { buildPublicView } from "./public-view";
 
 export function buildView(chain: ChainState, d: Decoded, address: string, sync: { error: string | null }): PrivateView {
   const dep = chain.deployment!;
