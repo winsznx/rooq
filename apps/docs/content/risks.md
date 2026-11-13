@@ -34,6 +34,8 @@ Whoever controls your wallet controls your private account. If you lose it, nobo
 
 Rooq depends on a coordinator, risk workers, a relayer and a price feed, and they can stop or fall behind. If risk workers fall behind, positions may not be liquidated on time, and losses can grow past margin. Your exit routes depend on the chain being up, and closing needs a fresh price.
 
+On testnet, Rooq runs all of these on one server. The two risk workers have separate keys but share that server, so one outage can stop both. The price relay has a single operator. The key guardian, which can replace the coordinator and risk worker keys after a 24-hour delay, is Rooq's deployer wallet. It can't move funds, change a market or touch a record.
+
 ## Changes
 
 Rooq's contracts can't be upgraded. A fix means a new deployment and a move to it. Risk settings on testnet are set for testing. Testnet deployments can be replaced, and test balances may not carry over.
