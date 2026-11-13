@@ -1,15 +1,10 @@
-import { initCrypto, toHex32 } from "@rooq/private-sdk";
 import { keccak256 } from "viem";
-import { addressOfKeys } from "./address";
-import { seedFromPrf, seedFromSignature } from "./backup";
 import { ChainState, ServiceDown } from "./chain-state";
-import { Engine, Named } from "./engine";
-import { destroyProvers, installCrsMirror } from "./prover";
-import { buildPublicView, Scanner } from "./scanner";
+import type { Engine } from "./engine";
+import { Named } from "./named";
+import { buildPublicView } from "./public-view";
 import { forgetRemembered, isVerified, loadEncrypted, loadRemembered, markVerified, openRemembered, operationsKey, rememberWithDeviceKey, rememberWithPasskey, saveEncrypted } from "./vault";
 import type { AccountSource, PrivateOp, RememberedInfo, VaultStatus, WorkerEvent, WorkerRequest } from "./types";
-
-installCrsMirror();
 
 const ctx = self as unknown as { postMessage: (m: unknown) => void; onmessage: ((e: MessageEvent) => void) | null };
 const emit = (event: WorkerEvent) => ctx.postMessage(event);
@@ -21,16 +16,22 @@ interface Session {
   readonly source: AccountSource;
 }
 
-/** Built once Barretenberg is loaded: the tree hashes its empty levels in the constructor. */
 let chain: ChainState | null = null;
 let session: Session | null = null;
 let engine: Engine | null = null;
 let currentWallet: string | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let persistQueue: Promise<unknown> = Promise.resolve();
-let cryptoReady: Promise<void> | null = null;
+type Runtime = typeof import("./account-runtime");
+let runtime: Promise<Runtime> | null = null;
 
-const ready = () => (cryptoReady ??= initCrypto());
+/** The proving engine, loaded once: on account open, or in the background after the first public view is shown. */
+const loadRuntime = (): Promise<Runtime> =>
+  (runtime ??= import("./account-runtime").then(async (r) => {
+    r.installCrsMirror();
+    await r.initCrypto();
+    return r;
+  }));
 
 function emitStatus(status: VaultStatus, remembered: RememberedInfo | null, verified: boolean) {
   emit({ e: "status", status, remembered, source: session?.source ?? null, verified });
@@ -85,15 +86,15 @@ async function stopEngine() {
   session = null;
   releaseSession?.();
   releaseSession = null;
-  await destroyProvers();
+  if (runtime) await (await runtime).destroyProvers();
 }
 
 async function openAccount(address: string, seed: bigint, source: AccountSource) {
-  await ready();
+  const r = await loadRuntime();
   chain ??= new ChainState();
   await stopEngine();
-  const scanner = new Scanner(seed);
-  const accountId = keccak256(toHex32(scanner.main.owner));
+  const scanner = new r.Scanner(seed);
+  const accountId = keccak256(r.toHex32(scanner.main.owner));
   if (!(await claimSession(accountId))) throw new Named("OPEN_IN_OTHER_TAB", "This account is already open in another tab. Lock it there or close that tab.", false);
   session = { address, seed, accountId, source };
   const key = await operationsKey(seed);
@@ -102,7 +103,7 @@ async function openAccount(address: string, seed: bigint, source: AccountSource)
     const snapshot = JSON.parse(JSON.stringify(ops, (_k, v: unknown) => (typeof v === "bigint" ? `n:${v.toString()}` : v))) as unknown;
     persistQueue = persistQueue.then(() => saveEncrypted(key, name, snapshot)).catch((error: unknown) => console.warn("rooq: operation records not stored", error));
   };
-  engine = new Engine(chain, scanner, addressOfKeys(scanner.main), persist, (view, ops: readonly PrivateOp[]) => {
+  engine = new r.Engine(chain, scanner, r.addressOfKeys(scanner.main), persist, (view, ops: readonly PrivateOp[]) => {
     if (view) emit({ e: "view", view });
     emit({ e: "ops", ops });
   });
@@ -115,13 +116,16 @@ async function openAccount(address: string, seed: bigint, source: AccountSource)
   await publishStatus();
 }
 
+let runtimePrefetch: ReturnType<typeof setTimeout> | null = null;
+
 async function publicTick() {
-  await ready();
   chain ??= new ChainState();
   if (!engine) {
     try {
       await chain.syncPublic();
       emit({ e: "view", view: buildPublicView(chain, null) });
+      // Warm the engine once the page has something to show, so opening an account doesn't wait for the download.
+      runtimePrefetch ??= setTimeout(() => void loadRuntime().catch((error: unknown) => console.warn("rooq: proving engine not loaded yet", error)), 2_000);
     } catch (error) {
       console.warn("rooq: public data read failed", error);
       const code = error instanceof ServiceDown ? (error.service === "rpc" ? "NETWORK_UNREACHABLE" : `${error.service.toUpperCase()}_UNAVAILABLE`) : "SYNC_FAILED";
@@ -154,17 +158,17 @@ async function handle(r: WorkerRequest): Promise<unknown> {
       requireCurrentWallet(r.address);
       if (r.first.toLowerCase() !== r.second.toLowerCase()) throw new Named("NON_DETERMINISTIC", "This wallet signed the same message two different ways, so it can't hold a stable private account. Use a passkey instead.", false);
       await markVerified(r.address);
-      await openAccount(r.address, seedFromSignature(r.first), "signature");
+      await openAccount(r.address, (await loadRuntime()).seedFromSignature(r.first), "signature");
       return true;
     }
     case "signature": {
       requireCurrentWallet(r.address);
-      await openAccount(r.address, seedFromSignature(r.signature), "signature");
+      await openAccount(r.address, (await loadRuntime()).seedFromSignature(r.signature), "signature");
       return true;
     }
     case "prfSeed": {
       requireCurrentWallet(r.address);
-      await openAccount(r.address, seedFromPrf(r.output), "passkey");
+      await openAccount(r.address, (await loadRuntime()).seedFromPrf(r.output), "passkey");
       return true;
     }
     case "unlockRemembered": {
