@@ -16,3 +16,13 @@ export function docsUrl(path = ""): string {
 function trimSlash(url: string): string {
   return url.replace(/\/+$/, "");
 }
+
+/** Public testnet faucets for test ETH, Stock Tokens and USDG. */
+export const FAUCETS = {
+  robinhood: "https://faucet.testnet.chain.robinhood.com",
+  paxos: "https://faucet.paxos.com",
+} as const;
+
+/** Rooq's account on X. */
+export const X_URL = "https://x.com/rooqtrade";
+export const X_HANDLE = "@rooqtrade";
