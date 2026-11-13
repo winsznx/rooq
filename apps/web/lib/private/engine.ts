@@ -4,6 +4,7 @@ import {
 } from "@rooq/private-sdk";
 import type { Hex } from "viem";
 import { ChainState, RelayRefused, ServiceDown } from "./chain-state";
+import { Named } from "./named";
 import { decodeAddress } from "./address";
 import { prove, ProofFailed, type WalletCircuit } from "./prover";
 import { buildView, largestPair, Scanner, selectNotes, type Decoded, type HeldNote, type HeldPosition } from "./scanner";
@@ -11,11 +12,7 @@ import type { Intent, OpIcon, PrivateOp, PrivateView, StartOp } from "./types";
 import type { OperationKind, OperationStage, OperationStep } from "@/lib/operations";
 
 /** A failure with a name the page can show. Anything else is a bug and also surfaces as a named INTERNAL failure. */
-export class Named extends Error {
-  constructor(readonly reason: string, message: string, readonly retry = true) {
-    super(message);
-  }
-}
+export { Named };
 
 interface Part {
   readonly action: string;
@@ -629,8 +626,15 @@ export class Engine {
         break;
       }
       case "combine": {
-        const notes = largestPair(this.decoded!.notes.filter((n) => n.asset === BigInt(i.asset) && n.leafIndex < this.chain.processed));
-        if (notes.length < 2) throw new Named("NOTHING_TO_COMBINE", "There's nothing to combine: this asset is already in one note per address.", false);
+        const held = this.decoded!.notes.filter((n) => n.asset === BigInt(i.asset) && n.leafIndex < this.chain.processed);
+        let notes = largestPair(held);
+        if (notes.length < 2) {
+          // Payouts land at one-time addresses and one proof spends from a single address, so a busy balance ends up one
+          // note per address. Move the largest note that isn't at the main address there; the next combine merges them.
+          const away = held.filter((n) => n.keys.pk.x !== main.pk.x).sort((a, b) => (a.value < b.value ? 1 : -1))[0];
+          if (!away) throw new Named("NOTHING_TO_COMBINE", "There's nothing to combine: this balance is already one note.", false);
+          notes = [away];
+        }
         reserve(notes);
         const w = this.spendParts(notes, i.asset, [{ value: notes.reduce((s, n) => s + n.value, 0n), to: addressOf(main) }]);
         parts.push(await this.proveTo(id, "spend", "spend", w.inputs, w.publicInputs, 0));
