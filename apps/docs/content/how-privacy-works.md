@@ -35,7 +35,7 @@ This limits what a release can say about one trade. It can't stop a determined p
 ## Who the services are
 
 - **Coordinator.** Matches locks and fills spot requests. It can only do what your signed limits allow.
-- **Risk workers.** Two services with separate keys. They read positions so liquidation works when you're offline.
+- **Risk workers.** Two services with separate keys. They decrypt each open position's size, margin and entry, against its one-time address, so funding and liquidation work while you're offline. They don't learn your wallet.
 - **Relayer.** Pays gas and submits proofs. It holds no secrets and can't sign for you.
 
 These services can see what's listed above. If one of them keeps or leaks what it has read, proofs can't undo that, and changing keys later can't erase what it learned.
