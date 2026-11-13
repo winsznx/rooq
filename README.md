@@ -65,4 +65,4 @@ The testnet deployment is recorded in [contracts/deployments/privacy-46630.json]
 
 ## License
 
-Contracts carry their license in each file's SPDX header (BUSL-1.1 for the private system, Apache-2.0 and MIT elsewhere).
+[Business Source License 1.1](LICENSE). You can read, copy, modify and use the code for non-production purposes. Production use needs a commercial license from Rooq. On 2030-11-13 the code converts to GPL-2.0-or-later. Files with their own SPDX header, such as the generated verifiers, keep that license.
