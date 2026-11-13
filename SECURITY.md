@@ -4,7 +4,7 @@ Rooq runs on Robinhood Chain testnet and has not been audited. Test assets have 
 
 ## Reporting a vulnerability
 
-Report privately through GitHub: open the **Security** tab of this repository and choose **Report a vulnerability**. Please don't open a public issue for anything that could affect funds or privacy.
+Report privately through GitHub: open the **Security** tab of this repository and choose **Report a vulnerability**. Please don't open a public issue for anything that could affect funds or privacy. You can also email contact@rooq.trade.
 
 Include what you found, the contract, circuit or service involved, and steps or a transaction that shows it. We'll confirm receipt and keep you updated until it's fixed. With your permission, we credit reporters in the fix.
 

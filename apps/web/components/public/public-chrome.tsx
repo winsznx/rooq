@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { X_HANDLE, X_URL } from "@rooq/config";
+import { SUPPORT_EMAIL, X_HANDLE, X_URL } from "@rooq/config";
 import { copy } from "@rooq/ui";
 import { PublicNav } from "./public-nav";
 import styles from "./public.module.css";
@@ -24,6 +24,10 @@ export function PublicFooter({ surface }: { surface?: "light" } = {}) {
             <a href={X_URL} className={styles.social} target="_blank" rel="noreferrer me">
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
               <span>Follow {X_HANDLE}</span>
+            </a>
+            <a href={`mailto:${SUPPORT_EMAIL}`} className={styles.social}>
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M3 6h18v12H3zM3 7l9 6 9-6" /></svg>
+              <span>{SUPPORT_EMAIL}</span>
             </a>
           </div>
           <nav aria-label="Product">
