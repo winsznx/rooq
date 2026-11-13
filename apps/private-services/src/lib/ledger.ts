@@ -39,6 +39,30 @@ export interface ExitEvent {
   readonly block: bigint;
 }
 
+export interface PairEndEvent {
+  readonly nullifier: Hex;
+  readonly kind: "closed" | "liquidated";
+  readonly market: bigint;
+  readonly mark: bigint;
+  readonly mode: bigint | null;
+  readonly block: bigint;
+  readonly tx: Hex;
+}
+
+export interface UnshieldEvent {
+  readonly asset: Address;
+  readonly recipient: Address;
+  readonly amount: bigint;
+  readonly block: bigint;
+  readonly tx: Hex;
+}
+
+export interface SpentNullifier {
+  readonly nullifier: Hex;
+  readonly block: bigint;
+  readonly tx: Hex;
+}
+
 export interface Consumption {
   readonly block: bigint;
   readonly tx: Hex;
@@ -86,6 +110,10 @@ export class Ledger {
   readonly deposits: LedgerDeposit[] = [];
   readonly funding: FundingEvent[] = [];
   readonly exits: ExitEvent[] = [];
+  readonly ends: PairEndEvent[] = [];
+  readonly unshields: UnshieldEvent[] = [];
+  /** Spent nullifiers in chain order, so a reader can ask for everything after a block. */
+  readonly spent: SpentNullifier[] = [];
   readonly spotUpdates: SpotUpdate[] = [];
   readonly createdMarkets: { readonly market: bigint; readonly block: bigint }[] = [];
   private readonly consumed = new Map<string, Consumption>();
@@ -267,6 +295,9 @@ export class Ledger {
     popAbove(this.deposits);
     popAbove(this.funding);
     popAbove(this.exits);
+    popAbove(this.ends);
+    popAbove(this.unshields);
+    popAbove(this.spent);
     popAbove(this.spotUpdates);
     popAbove(this.createdMarkets);
     popAbove(this.roots);
@@ -329,7 +360,10 @@ export class Ledger {
         }
         case "RecordsConsumed":
         case "NullifiersSpent":
-          for (const nf of args.nullifiers as readonly Hex[]) this.consumed.set(nf, { block, tx });
+          for (const nf of args.nullifiers as readonly Hex[]) {
+            this.consumed.set(nf, { block, tx });
+            this.spent.push({ nullifier: nf, block, tx });
+          }
           break;
         case "RootUpdated": {
           const event: RootEvent = { root: BigInt(args.root as Hex), seq: args.seq as bigint, first: Number(args.firstLeafIndex as bigint), count: Number(args.count as bigint), block };
@@ -349,6 +383,15 @@ export class Ledger {
           break;
         case "PoolUpdated":
           this.spotUpdates.push({ pool: args.pool as bigint, head: BigInt(args.head as Hex), ciphertext: (args.ciphertext as readonly Hex[]).map(BigInt), block });
+          break;
+        case "PairClosed":
+          this.ends.push({ nullifier: args.nullifier as Hex, kind: "closed", market: args.market as bigint, mark: args.mark as bigint, mode: args.mode as bigint, block, tx });
+          break;
+        case "PairLiquidated":
+          this.ends.push({ nullifier: args.nullifier as Hex, kind: "liquidated", market: args.market as bigint, mark: args.mark as bigint, mode: null, block, tx });
+          break;
+        case "Unshielded":
+          this.unshields.push({ asset: args.asset as Address, recipient: args.recipient as Address, amount: args.amount as bigint, block, tx });
           break;
         case "ExitRequested":
           this.exits.push({ nullifier: args.nullifier as Hex, requester: args.requester as Address, matureAt: args.matureAt as bigint, block });

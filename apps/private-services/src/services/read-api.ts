@@ -9,9 +9,13 @@ import { badRequest, ServiceError } from "../lib/errors";
 import type { ChainContext } from "../lib/chain";
 import { runService, type ServiceContext } from "../lib/service";
 import { toHex32 } from "@rooq/private-sdk";
+import { PublicIndex } from "../lib/public-index";
 import type { Hex } from "viem";
 
 const PAGE_LIMIT = 512;
+/** Market views read the chain; every visitor polls them, so one read serves everyone for this long. */
+const MARKETS_CACHE_MS = 2_000;
+const PUBLIC_EVENTS_LIMIT = 5_000;
 const BATCH_LIMIT = 256;
 const READ_PER_MINUTE = 600;
 const QUOTE_PER_MINUTE = Number(process.env.SPOT_QUOTE_PER_MINUTE ?? 30);
@@ -44,8 +48,20 @@ async function marketView(chain: ChainContext, ledgerEpochs: number, id: bigint)
   };
 }
 
-function buildRoutes(ctx: ServiceContext): Route[] {
+function buildRoutes(ctx: ServiceContext, index: PublicIndex): Route[] {
   const { chain, ledger } = ctx;
+  let marketsCache: { at: number; body: unknown } | null = null;
+  const marketsBody = async (): Promise<unknown> => {
+    if (marketsCache && Date.now() - marketsCache.at < MARKETS_CACHE_MS) return marketsCache.body;
+    const body = { markets: await Promise.all(chain.markets.map((m) => marketView(chain, ledger.funding.filter((e) => e.market === m.id).length, m.id))) };
+    marketsCache = { at: Date.now(), body };
+    return body;
+  };
+  const after = <T extends { block: bigint }>(rows: readonly T[], from: bigint): T[] => {
+    let i = rows.length;
+    while (i > 0 && rows[i - 1]!.block >= from) i--;
+    return rows.slice(i, i + PUBLIC_EVENTS_LIMIT);
+  };
   const page = <T extends { leafIndex: number }>(rows: readonly T[], from: number, limit: number, view: (row: T) => unknown): unknown => {
     let i = rows.findIndex((r) => r.leafIndex >= from);
     if (i < 0) i = rows.length;
@@ -58,6 +74,29 @@ function buildRoutes(ctx: ServiceContext): Route[] {
   });
   return [
     { method: "GET", pattern: "/v1/sync", perMinute: READ_PER_MINUTE, handler: () => json(syncView()) },
+    {
+      // Everything a page needs that anyone can read on chain, after block `from`, in one response. `pricesSince` is a unix time.
+      method: "GET", pattern: "/v1/public", perMinute: READ_PER_MINUTE,
+      handler: ({ url }) => {
+        const fromRaw = url.searchParams.get("from") ?? "0";
+        const sinceRaw = url.searchParams.get("pricesSince") ?? "0";
+        if (!/^\d{1,12}$/.test(fromRaw) || !/^\d{1,12}$/.test(sinceRaw)) throw badRequest("from and pricesSince must be integers.");
+        const from = BigInt(fromRaw);
+        const since = Number(sinceRaw);
+        const spent = after(ledger.spent, from);
+        const capped = spent.length === PUBLIC_EVENTS_LIMIT;
+        return json({
+          head: ledger.head, headTime: index.headTime, syncedBlock: ledger.syncedBlock, reorgs: ledger.reorgs,
+          nextFrom: capped ? spent.at(-1)!.block : ledger.syncedBlock === null ? from : ledger.syncedBlock + 1n,
+          tokens: index.tokens,
+          spent: spent.map((e) => ({ nullifier: e.nullifier, block: e.block, tx: e.tx })),
+          exits: after(ledger.exits, from).map((e) => ({ nullifier: e.nullifier, matureAt: e.matureAt, block: e.block })),
+          ends: after(ledger.ends, from).map((e) => ({ nullifier: e.nullifier, kind: e.kind, market: e.market, mark: e.mark, mode: e.mode, block: e.block, tx: e.tx })),
+          unshields: after(ledger.unshields, from).map((e) => ({ asset: e.asset, recipient: e.recipient, amount: e.amount, block: e.block, tx: e.tx })),
+          prices: Object.fromEntries(chain.markets.map((m) => [m.id.toString(), index.prices(m.id, since)])),
+        });
+      },
+    },
     { method: "GET", pattern: "/v1/deployment", perMinute: READ_PER_MINUTE, handler: () => json(chain.deploymentView()) },
     {
       method: "GET", pattern: "/v1/records", perMinute: READ_PER_MINUTE,
@@ -132,7 +171,7 @@ function buildRoutes(ctx: ServiceContext): Route[] {
         throw new ServiceError(503, "QUOTE_UNAVAILABLE", "No pricing service can answer right now.", true);
       },
     },
-    { method: "GET", pattern: "/v1/markets", perMinute: READ_PER_MINUTE, handler: async () => json({ markets: await Promise.all(chain.markets.map((m) => marketView(chain, ledger.funding.filter((e) => e.market === m.id).length, m.id))) }) },
+    { method: "GET", pattern: "/v1/markets", perMinute: READ_PER_MINUTE, handler: async () => json(await marketsBody()) },
     {
       method: "GET", pattern: "/v1/markets/:id", perMinute: READ_PER_MINUTE,
       handler: async ({ params }) => {
@@ -159,9 +198,11 @@ await runService({
   port: intEnv(process.env, "PORT", PORTS.readApi, 1),
   init(ctx) {
     ctx.liveness.details = {};
+    const index = new PublicIndex(ctx.chain, ctx.log);
     return {
-      routes: buildRoutes(ctx),
+      routes: buildRoutes(ctx, index),
       async tick() {
+        await index.refresh(ctx.ledger.head);
         ctx.liveness.backlog = { blocksBehind: ctx.ledger.syncedBlock === null ? 0 : Number(ctx.ledger.head - ctx.ledger.syncedBlock) };
       },
     };
