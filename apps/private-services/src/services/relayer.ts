@@ -29,6 +29,9 @@ interface Job {
   call: RelayCall | null;
 }
 
+/** Past transactions read at once during startup recovery; a public RPC rate-limits larger bursts. */
+const RECOVERY_BATCH = 4;
+const RECOVERY_PASSES = 3;
 const MAX_JOBS = 20_000;
 const RELAY_PER_MINUTE = 60;
 const MAX_BACKLOG = 64;
@@ -41,6 +44,8 @@ class Relayer {
   private readonly finalityBlocks: bigint;
   private readonly rebroadcastMs: number;
   private recovered = false;
+  private recoveryQueue: Hex[] | null = null;
+  private recoveryPasses = 0;
 
   constructor(
     private readonly ctx: ServiceContext,
@@ -249,28 +254,43 @@ class Relayer {
   }
 
   /** Rebuilds confirmed jobs from this key's own past transactions. Runs once, after the first ledger sync. */
+  /**
+   * Rebuilds confirmed jobs from this key's past transactions, so a restart still answers job lookups. A public RPC
+   * rate-limits a burst of reads, so it reads a few at a time and retries only the ones that failed. After a few passes
+   * the relayer opens anyway: an unrecovered old job only means its status lookup says unknown, never a lost fund.
+   */
   private async recover(): Promise<void> {
-    const txs = this.ctx.ledger.consumptionTxs();
+    this.recoveryQueue ??= [...new Set(this.ctx.ledger.consumptionTxs())];
     const me = this.sender.account.address.toLowerCase();
+    const failed: Hex[] = [];
     let restored = 0;
-    for (let i = 0; i < txs.length; i += 16) {
-      const batch = txs.slice(i, i + 16);
-      await Promise.all(batch.map(async (hash) => {
+    for (let i = 0; i < this.recoveryQueue.length; i += RECOVERY_BATCH) {
+      const batch = this.recoveryQueue.slice(i, i + RECOVERY_BATCH);
+      const results = await Promise.allSettled(batch.map(async (hash) => {
         const tx = await this.ctx.chain.client.getTransaction({ hash });
-        if (tx.from.toLowerCase() !== me) return;
+        if (tx.from.toLowerCase() !== me) return false;
         const id = keccak256(tx.input);
-        if (this.jobs.has(id)) return;
+        if (this.jobs.has(id)) return false;
         const decoded = decodeFunctionData({ abi: this.ctx.chain.abi, data: tx.input });
-        if (!isRelayAction(decoded.functionName)) return;
+        if (!isRelayAction(decoded.functionName)) return false;
         const receipt = await this.sender.receiptOrNull(hash);
-        if (!receipt || receipt.status !== "success") return;
+        if (!receipt || receipt.status !== "success") return false;
         this.remember({ id, action: decoded.functionName, status: "confirmed", reasonCode: null, tx: hash, raw: null, block: receipt.blockNumber, blockHash: receipt.blockHash, attempts: 1, createdAt: Date.now(), updatedAt: Date.now(), call: null });
         this.byTx.set(hash, id);
-        restored += 1;
+        return true;
       }));
+      results.forEach((r, j) => {
+        if (r.status === "rejected") failed.push(batch[j]!);
+        else if (r.value) restored += 1;
+      });
     }
-    this.recovered = true;
-    this.ctx.log.info("jobs_recovered", { restored });
+    this.recoveryQueue = failed;
+    this.recoveryPasses += 1;
+    if (failed.length === 0 || this.recoveryPasses >= RECOVERY_PASSES) {
+      this.recovered = true;
+      this.recoveryQueue = null;
+      this.ctx.log.info("jobs_recovered", { restored, unread: failed.length, passes: this.recoveryPasses });
+    }
   }
 
   /** Exit bonds are fronted by this key. Once a pair is gone the bond is reclaimable, so it is reclaimed and withdrawn. */
