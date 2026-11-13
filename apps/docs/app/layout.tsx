@@ -8,7 +8,7 @@ import "./globals.css";
 
 const description = "How Rooq works: private spot and perps for stock tokens on Robinhood Chain testnet. What others can see, what you can lose and how to use it.";
 
-const SHARE_IMAGE = { url: "/social/og-1200x630.png", width: 1200, height: 630, alt: "How private trading works on Rooq." };
+const SHARE_IMAGE = { url: "/social/docs/introduction.png", width: 1200, height: 630, alt: "What is Rooq, Rooq Docs" };
 
 export const metadata: Metadata = {
   metadataBase: new URL(DOCS_URL),
