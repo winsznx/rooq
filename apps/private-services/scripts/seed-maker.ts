@@ -10,7 +10,9 @@ import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, pa
 import { privateKeyToAccount } from "viem/accounts";
 
 const RPC_URL = "https://rpc.testnet.chain.robinhood.com";
-const NOTE_USDG = 100_000_000n;
+const NOTE_USDG = BigInt(process.env.NOTE_USDG ?? "100000000");
+/** Each deposit index makes a distinct note; a later top-up must start after the ones already used. */
+const START_K = Number(process.env.START_K ?? 0);
 const SPREAD_BPS = 20;
 const CLOSE_SPREAD_BPS = 30;
 const LOCKS_PER_MARKET = 1;
@@ -46,10 +48,10 @@ async function confirmed(hash: Hex, label: string): Promise<void> {
 await initCrypto();
 const seed = BigInt(required("MAKER_SEED"));
 const owner = deriveKeys(seed).owner;
-const count = deployment.perpFeeds.length;
+const count = Number(process.env.NOTE_COUNT ?? deployment.perpFeeds.length);
 
 await confirmed(await wallet.writeContract({ address: deployment.asset, abi: erc20Abi, functionName: "approve", args: [deployment.pool, NOTE_USDG * BigInt(count)] }), "approve");
-for (let k = 0; k < count; k++) {
+for (let k = START_K; k < START_K + count; k++) {
   const { rho, blind } = depositOpening(seed, k);
   await confirmed(await wallet.writeContract({ address: deployment.pool, abi: poolAbi, functionName: "shield", args: [deployment.asset, NOTE_USDG, toHex32(noteInner(owner, rho, blind)) as Hex] }), `shield ${k}`);
 }
