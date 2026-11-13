@@ -8,11 +8,12 @@ export interface ContractRow {
 
 export const EXPLORER_URL = ROBINHOOD_TESTNET.explorerUrl ?? "";
 
-/** Set each address from the private broadcast. `null` renders as "Published at launch". */
+/** Robinhood Chain testnet (46630). Source of truth: contracts/deployments/privacy-46630.json. */
 export const ROOQ_CONTRACTS: readonly ContractRow[] = [
-  { name: "PrivatePairs", address: null, role: "Holds all tokens. Runs the note tree, private balances, perps, funding and forced exits. It has no admin and no pause." },
-  { name: "PrivateSpot", address: null, role: "Private pools and liquidity. It cannot move tokens. Pools and fees are fixed at deployment." },
-  { name: "OracleAdapter", address: null, role: "Accepts a price only if it is fresh, in range and from the feed approved for that token." },
+  { name: "PrivatePairs", address: "0x6b3dEA9d7C3FaCbFd8Eb78c101f0C0fF45648DF5", role: "Holds all tokens. Runs the note tree, private balances, perps, funding and forced exits. It has no admin and no pause." },
+  { name: "PrivateSpot", address: "0x0F792918dC1949de932AC11446fba82beBa32404", role: "Private pools and liquidity. It cannot move tokens. Pools and fees are fixed at deployment." },
+  { name: "PrivateMarkets", address: "0xDCec34FAECaFC1A988b8854521DaBBb1E40bC4af", role: "Perps market settings and bonds. It cannot move tokens." },
+  { name: "OracleAdapter", address: "0x696949Bd13565f3A8364543D6bC8aCfF1e928c79", role: "Accepts a price only if it is fresh, in range and from the feed approved for that token." },
 ];
 
 export const THIRD_PARTY_CONTRACTS: readonly ContractRow[] = [
