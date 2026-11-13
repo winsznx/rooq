@@ -58,7 +58,9 @@ for w in a b; do
     "# Keychain: rooq-private-gas-risk-$w" \
     'RISK_TX_KEY=' \
     "# Keychain: rooq-private-reward-$w" \
-    'RISK_REWARD_SEED='
+    'RISK_REWARD_SEED=' \
+    '# Seconds between routine funding updates when nothing trades. Must stay well under the one-hour limit.' \
+    'RISK_EPOCH_INTERVAL_S=1800'
 done
 
 put maker \
