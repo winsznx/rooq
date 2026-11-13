@@ -62,7 +62,7 @@ A browser wallet, test ETH for gas and test tokens. [Getting started](/getting-s
 
 ### Where do I get test tokens?
 
-The [Robinhood Chain faucet](https://faucet.testnet.chain.robinhood.com) has test ETH, and the [Paxos guide](https://docs.paxos.com/guides/stablecoin/usdg/testnet) covers USDG.
+The [Robinhood Chain faucet](https://faucet.testnet.chain.robinhood.com) has test ETH and Stock Tokens. The [Paxos faucet](https://faucet.paxos.com) has USDG: pick Robinhood Chain testnet and paste your wallet address. Both are free.
 
 ### What's the difference between my wallet and my private account?
 

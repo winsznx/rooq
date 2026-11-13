@@ -1,6 +1,7 @@
 import Link from "next/link";
 import styles from "./docs.module.css";
 import { Wordmark } from "./wordmark";
+import { X_HANDLE, X_URL } from "@rooq/config";
 import { APP_URL, SUPPORT_EMAIL } from "@/lib/site";
 
 export function Footer() {
@@ -13,6 +14,7 @@ export function Footer() {
         <Link href="/risks">Risks</Link>
         <Link href="/terms">Terms</Link>
         <Link href="/privacy-policy">Privacy</Link>
+        <a href={X_URL} target="_blank" rel="noreferrer me">{`X ${X_HANDLE}`}</a>
         <a href="/llms.txt">llms.txt</a>
         <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
       </nav>

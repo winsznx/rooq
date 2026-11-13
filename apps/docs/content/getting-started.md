@@ -13,8 +13,8 @@ Connecting your wallet doesn't publish anything. Nothing on the chain links your
 Test funds have no value. You get them from public faucets.
 
 - **Test ETH** pays for gas on your public transactions. Get it from the [Robinhood Chain faucet](https://faucet.testnet.chain.robinhood.com).
-- **USDG** is the token used for margin and spot trades. Get it from the [Paxos testnet guide](https://docs.paxos.com/guides/stablecoin/usdg/testnet).
-- **Stock Tokens** are TSLA, AMZN, PLTR, NFLX and AMD on testnet. The faucets above supply them. Check any token against the addresses on the [Contracts](/contracts) page, because copycat tokens with the same ticker exist on this chain.
+- **USDG** is the token used for margin and spot trades. Get it from the [Paxos faucet](https://faucet.paxos.com): pick Robinhood Chain testnet and paste your wallet address.
+- **Stock Tokens** are TSLA, AMZN, PLTR, NFLX and AMD on testnet. The Robinhood Chain faucet supplies them. Check any token against the addresses on the [Contracts](/contracts) page, because copycat tokens with the same ticker exist on this chain.
 
 ## 3. Create your private account
 
