@@ -9,7 +9,7 @@ export const dynamicParams = false;
 
 /** Each page has a pre-rendered card in public/social/docs, named by slug. */
 function docShareImage(slug: string, title: string) {
-  return { url: `/social/docs/${slug}.png`, width: 1200, height: 630, alt: `${title}, Rooq Docs` };
+  return { url: `/social/docs/${slug}.jpg`, width: 1200, height: 630, alt: `${title}, Rooq Docs` };
 }
 
 export function generateStaticParams(): { slug: string }[] {
