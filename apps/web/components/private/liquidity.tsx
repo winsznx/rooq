@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatFixed, parseDecimal } from "@rooq/sdk";
+import { formatFixed, parseDecimal, toDecimalInput } from "@rooq/sdk";
 import { Dialog } from "@/components/feedback/dialog";
 import { AmountField } from "@/components/funds/amount-field";
 import { usePrivate, wallet } from "@/lib/private/client";
@@ -25,7 +25,7 @@ function AddForm({ pool, view }: { pool: PoolView; view: PrivateView }) {
     if (a0 === null || a0 <= 0n) return;
     try {
       const q = await fetchQuote(pool.id, 0n, pool.token0, a0);
-      setB(formatFixed(q.amountOut, t1.decimals, t1.decimals));
+      setB(toDecimalInput(q.amountOut, t1.decimals));
     } catch (error) {
       setNote(error instanceof Error ? error.message : "No quote right now.");
     }

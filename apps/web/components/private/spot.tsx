@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import type { Hex } from "viem";
-import { formatFixed, parseDecimal } from "@rooq/sdk";
+import { formatFixed, parseDecimal, toDecimalInput } from "@rooq/sdk";
 import { AmountField } from "@/components/funds/amount-field";
 import { Segmented, StateBlock } from "@/components/primitives";
 import { useSlippageBps } from "@/lib/preferences";
@@ -102,7 +102,7 @@ export function SwapForm({ view, initialFrom, initialTo, lockPair }: { view: Pri
         ) : (
           <Segmented<string> value={from ?? ""} onChange={(v) => setFrom(v as Hex)} label="From" options={assets.map((t) => ({ value: t.address, label: <TokenLabel view={view} asset={t.address} /> }))} />
         )}
-        <AmountField label="Amount" value={text} onChange={setText} decimals={fromToken?.decimals ?? 18} unit={fromToken?.symbol ?? ""} balanceLabel={unlocked ? "Private balance" : undefined} balance={free} onMax={unlocked && fromToken ? () => setText(formatFixed(free, fromToken.decimals, fromToken.decimals)) : undefined} />
+        <AmountField label="Amount" value={text} onChange={setText} decimals={fromToken?.decimals ?? 18} unit={fromToken?.symbol ?? ""} balanceLabel={unlocked ? "Private balance" : undefined} balance={free} onMax={unlocked && fromToken ? () => setText(toDecimalInput(free, fromToken.decimals)) : undefined} />
         <span className="field-label"><span>To</span></span>
         {lockPair && to ? <TokenLabel view={view} asset={to} /> : <Segmented<string> value={to ?? ""} onChange={(v) => setTo(v as Hex)} label="To" options={assets.filter((t) => t.address !== from).map((t) => ({ value: t.address, label: <TokenLabel view={view} asset={t.address} /> }))} />}
       </div>
