@@ -18,6 +18,10 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Generate Next.js route types
+        run: |
+          pnpm --filter @rooq/web exec next typegen
+          pnpm --filter @rooq/docs exec next typegen
       - name: Typecheck
         run: pnpm -r --filter=./packages/* --filter=./apps/* exec tsc --noEmit
       - name: SDK unit tests
