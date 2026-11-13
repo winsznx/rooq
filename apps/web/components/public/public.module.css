@@ -24,6 +24,8 @@
 .footerGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 24px; padding: 48px 0 56px; }
 .footerBrand { grid-column: 1 / -1; display: grid; gap: 16px; justify-items: start; align-content: start; }
 .footerBrand p { margin: 0; max-width: 40ch; font-size: 14px; line-height: 1.5; color: var(--rq-ink-secondary); }
+.social { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 16px; border: 1px solid var(--rq-line); border-radius: 999px; font-size: 14px; color: var(--rq-ink); text-decoration: none; }
+.social:hover { background: var(--rq-surface-raised); }
 .footerGrid nav { display: grid; gap: 14px; align-content: start; }
 .footerGrid h2 { margin: 0 0 6px; font-size: 14px; font-weight: 400; color: var(--rq-ink-tertiary); }
 .footerGrid a { font-size: 14px; color: var(--rq-ink); text-decoration: none; }

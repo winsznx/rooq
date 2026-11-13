@@ -1,24 +1,30 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { X_HANDLE, X_URL } from "@rooq/config";
 import { copy } from "@rooq/ui";
 import { PublicNav } from "./public-nav";
 import styles from "./public.module.css";
 import { BrandMark } from "./brand-mark";
 
-export function PublicFooter() {
+/** `surface` pins the logo colours when the footer sits on a light block inside a dark page. */
+export function PublicFooter({ surface }: { surface?: "light" } = {}) {
   return (
     <footer className={styles.footer}>
       <div className={styles.frame}>
         <div className={styles.disclosure}>
           <p>Testnet only. Test tokens have no value. Rooq is not audited. Leverage can lose your entire margin. Deposits and withdrawals are visible on the public chain, and timing can give clues.</p>
-          <p className={styles.runsOn}>Runs on Robinhood Chain testnet. {copy.system.independent}</p>
+          <p className={styles.runsOn}>{copy.system.independent}</p>
         </div>
         <div className={styles.footerGrid}>
           <div className={styles.footerBrand}>
             <Link href="/" className={styles.wordmark} aria-label="Rooq home">
-              <BrandMark variant="wordmark" />
+              <BrandMark variant="wordmark" surface={surface} />
             </Link>
             <p>Buy stock tokens or trade their price with leverage. Your balances and positions stay out of public view.</p>
+            <a href={X_URL} className={styles.social} target="_blank" rel="noreferrer me">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+              <span>Follow {X_HANDLE}</span>
+            </a>
           </div>
           <nav aria-label="Product">
             <h2>Product</h2>
@@ -45,7 +51,7 @@ export function PublicFooter() {
         </div>
       </div>
       <div className={styles.ghost} aria-hidden="true">
-        <BrandMark variant="wordmark" className={styles.ghostMark} />
+        <BrandMark variant="wordmark" surface={surface} className={styles.ghostMark} />
       </div>
     </footer>
   );
