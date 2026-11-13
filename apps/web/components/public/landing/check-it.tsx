@@ -3,9 +3,9 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { useState } from "react";
-import { copy } from "@rooq/ui";
+import { docsUrl } from "@rooq/config";
 import { ChevronDown, ChevronRight } from "../../icons";
-import { BrandMark } from "../brand-mark";
+import { PublicFooter } from "../public-chrome";
 import styles from "./landing.module.css";
 
 const CHECKS: readonly { title: string; body: string; href: string }[] = [
@@ -64,29 +64,23 @@ export function CheckIt() {
           </div>
         </div>
         <div className={styles.finalCta}>
-          <p>Try it with test money. It takes a minute.</p>
-          <Link href="/app/markets" className="btn btn-primary btn-lg">
-            Start trading
-          </Link>
+          <div className={styles.finalCopy}>
+            <h2>Try it with test money</h2>
+            <p>Connect a wallet, sign once and place your first private trade. It takes about a minute.</p>
+          </div>
+          <div className={styles.finalActions}>
+            <Link href="/app/markets" className={styles.finalButton}>
+              Start trading
+              <span className={styles.finalButtonIcon} aria-hidden="true"><ChevronRight /></span>
+            </Link>
+            <a href={docsUrl("getting-started")} className={styles.finalButton}>
+              Get test funds
+              <span className={styles.finalButtonIcon} aria-hidden="true"><ChevronRight /></span>
+            </a>
+          </div>
         </div>
       </div>
-      <footer className={styles.footer}>
-        <div className={styles.footerRow}>
-          <Link href="/" className={styles.footerMark} aria-label="Rooq home">
-            <BrandMark variant="wordmark" surface="light" />
-          </Link>
-          <nav aria-label="Footer">
-            <Link href="/app/markets">{copy.nav.markets}</Link>
-            <Link href="/app/trade">{copy.nav.trade}</Link>
-            <Link href="/app/makers">{copy.nav.makers}</Link>
-            <Link href="/docs">{copy.nav.docs}</Link>
-            <Link href="/status">{copy.system.status}</Link>
-            <Link href="/docs#terms">{copy.system.terms}</Link>
-            <Link href="/docs#privacy">{copy.system.privacy}</Link>
-          </nav>
-        </div>
-        <p className={styles.small}>Testnet only. Test tokens have no value. Not audited. Leverage can lose your entire margin. Deposits and withdrawals are visible on the public chain, and timing can give clues. {copy.system.independent}</p>
-      </footer>
+      <PublicFooter surface="light" />
     </section>
   );
 }

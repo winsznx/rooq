@@ -263,15 +263,6 @@
 .faq h3 { margin: 0; font-size: 16px; font-weight: 400; }
 .faq button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 0; border: 0; background: transparent; color: var(--rq-ink); cursor: pointer; font: inherit; text-align: left; }
 .faq p { margin: 0 0 16px; font-size: 15px; line-height: 1.45; color: var(--rq-ink-secondary); max-width: 54ch; }
-.finalCta { display: grid; justify-items: center; text-align: center; gap: 18px; margin-top: 40px; padding: 28px; border-radius: 20px; background: var(--rq-ink); color: var(--rq-canvas); }
-.finalCta p { margin: 0; font-size: clamp(22px, 2.4vw, 32px); letter-spacing: -0.02em; }
-.finalCta :global(.btn-primary) { --btn-bg: var(--rq-canvas); --btn-fg: var(--rq-ink); }
-.footer { display: grid; gap: 12px; max-width: calc(var(--rq-content) + var(--rq-page-gutter) * 2); margin-inline: auto; padding: 20px var(--rq-page-gutter) 28px; border-top: 1px solid var(--rq-line); }
-.footerRow { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 24px; }
-.footerMark { display: inline-flex; align-items: center; min-height: 44px; border-radius: 8px; }
-.footerRow nav { display: flex; flex-wrap: wrap; gap: 4px 20px; }
-.footerRow nav a { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--rq-ink-secondary); text-decoration: none; }
-.footerRow nav a:hover { color: var(--rq-ink); }
 
 @media (min-width: 700px) {
   .tableRow { grid-template-columns: 30px minmax(0, 1fr) 140px 110px 80px; }
@@ -322,3 +313,32 @@
   .glassAccount > div { display: grid; justify-content: start; gap: 2px; }
   .glassAccount b { font-size: 12px; }
 }
+
+.finalCta { position: relative; overflow: hidden; display: grid; gap: 28px; align-items: end; margin-top: 40px; padding: 44px 32px; border-radius: 24px; color: #fff; isolation: isolate;
+  background:
+    radial-gradient(circle at 100% 50%, rgb(255 255 255 / 0.30) 0 15%, rgb(255 255 255 / 0.20) 15.2% 24%, rgb(255 255 255 / 0.13) 24.2% 33%, rgb(255 255 255 / 0.07) 33.2% 42%, transparent 42.2%),
+    linear-gradient(120deg, #8F4524 0%, #B8622F 55%, #D4803F 100%); }
+.finalCopy { display: grid; gap: 12px; max-width: 560px; }
+.finalCopy h2 { margin: 0; font-size: clamp(30px, 3.6vw, 46px); font-weight: 500; line-height: 1.05; letter-spacing: -0.025em; }
+.finalCopy p { margin: 0; font-size: 16px; line-height: 1.5; color: rgb(255 255 255 / 0.86); text-wrap: pretty; }
+.finalActions { display: flex; flex-wrap: wrap; gap: 10px; }
+.finalButton { display: inline-flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 6px 6px 20px; border-radius: 999px; background: #0C0F10; color: #fff; font-size: 15px; font-weight: 500; text-decoration: none; transition: background 160ms ease; }
+.finalButton:hover { background: #1D2527; }
+.finalButton:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.finalButtonIcon { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 999px; background: #fff; color: #0C0F10; }
+.finalButtonIcon svg { width: 16px; height: 16px; }
+@media (min-width: 900px) {
+  .finalCta { grid-template-columns: minmax(0, 1fr) auto; padding: 56px 56px; }
+}
+@media (prefers-reduced-motion: reduce) { .finalButton { transition: none; } }
+
+.ca { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 4px; }
+.caCopy, .caBuy { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; border-radius: 999px; font-size: 13px; text-decoration: none; color: var(--rq-ink); }
+.caCopy { border: 1px solid rgb(255 255 255 / 0.16); background: rgb(255 255 255 / 0.06); cursor: pointer; font: inherit; font-size: 13px; }
+.caCopy:hover, .caBuy:hover { background: rgb(255 255 255 / 0.12); }
+.caCopy:focus-visible, .caBuy:focus-visible { outline: 2px solid var(--rq-focus); outline-offset: 2px; }
+.caLabel { color: var(--rq-ink-secondary); }
+.caValue { font-family: var(--font-plex-mono), ui-monospace, monospace; }
+.caBuy { color: var(--rq-ink); }
+.caLogo { border-radius: 5px; }
+.caStatus { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

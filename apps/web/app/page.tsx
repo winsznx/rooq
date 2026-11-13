@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { X_URL } from "@rooq/config";
 import Link from "next/link";
 import Image from "next/image";
 import { PublicNav } from "@/components/public/public-nav";
@@ -9,6 +10,7 @@ import { Journey } from "@/components/public/landing/journey";
 import { Earn } from "@/components/public/landing/earn";
 import { CheckIt } from "@/components/public/landing/check-it";
 import { TokenLogo } from "@/components/public/landing/token-logo";
+import { TokenCa } from "@/components/public/landing/token-ca";
 import styles from "@/components/public/landing/landing.module.css";
 
 const TOKENS = ["TSLA", "AMZN", "PLTR", "NFLX", "AMD", "USDG"] as const;
@@ -20,7 +22,7 @@ export const metadata: Metadata = { alternates: { canonical: "/" } };
 const JSON_LD = {
   "@context": "https://schema.org",
   "@graph": [
-    { "@type": "Organization", "@id": `${SITE_URL}/#org`, name: "Rooq", url: SITE_URL, logo: `${SITE_URL}/brand/logos/symbol-black.svg` },
+    { "@type": "Organization", "@id": `${SITE_URL}/#org`, name: "Rooq", url: SITE_URL, sameAs: [X_URL], logo: `${SITE_URL}/brand/logos/symbol-black.svg` },
     { "@type": "WebSite", "@id": `${SITE_URL}/#site`, name: "Rooq", url: SITE_URL, publisher: { "@id": `${SITE_URL}/#org` } },
     {
       "@type": "WebApplication",
@@ -51,6 +53,7 @@ export default function Landing() {
             <Link href="/app/markets" className={`btn btn-primary ${styles.heroCta}`}>
               Start trading
             </Link>
+            <TokenCa />
           </div>
           <div className={styles.heroStage}>
             <HeroDemo />
