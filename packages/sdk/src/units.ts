@@ -42,3 +42,11 @@ export function parseDecimal(input: string, decimals: number): bigint | null {
   if (frac.length > decimals) return null;
   return BigInt(whole || "0") * 10n ** BigInt(decimals) + BigInt(frac.padEnd(decimals, "0") || "0");
 }
+
+/** The exact inverse of `parseDecimal` for filling an input: every digit kept, no grouping, no trailing zeros. */
+export function toDecimalInput(value: bigint, decimals: number): string {
+  if (value < 0n) throw new RangeError("toDecimalInput expects a non-negative value");
+  const unit = 10n ** BigInt(decimals);
+  const frac = (value % unit).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return frac === "" ? (value / unit).toString() : `${value / unit}.${frac}`;
+}

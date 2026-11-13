@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { UNKNOWN, formatCollateral, formatCompact, formatFixed, formatPercentWad, formatPrice } from "../src/format";
-import { parseDecimal as parse } from "../src/units";
+import { parseDecimal as parse, toDecimalInput } from "../src/units";
 
 describe("formatting never invents values", () => {
   it("unknown renders as an em dash, not zero", () => {
@@ -40,5 +40,19 @@ describe("parseDecimal commas", () => {
     expect(parse("1,50", 6)).toBeNull();
     expect(parse("1,2,3", 6)).toBeNull();
     expect(parse(",5", 6)).toBeNull();
+  });
+});
+
+describe("toDecimalInput", () => {
+  it("keeps every digit and drops only trailing zeros", () => {
+    expect(toDecimalInput(95_830_000_000_000_000n, 18)).toBe("0.09583");
+    expect(toDecimalInput(2_500_314_700n, 6)).toBe("2500.3147");
+    expect(toDecimalInput(1n, 18)).toBe("0.000000000000000001");
+    expect(toDecimalInput(100_000_000n, 6)).toBe("100");
+    expect(toDecimalInput(0n, 6)).toBe("0");
+  });
+
+  it("round-trips through parseDecimal", () => {
+    for (const v of [0n, 1n, 123_456_789n, 10n ** 24n + 7n]) expect(parse(toDecimalInput(v, 18), 18)).toBe(v);
   });
 });
