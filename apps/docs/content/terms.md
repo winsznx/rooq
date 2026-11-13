@@ -20,7 +20,7 @@ Rooq has not been audited. It may contain bugs, including bugs that lose funds o
 
 ## Your account and keys
 
-You control your private account. It comes from your wallet, a passkey or a generated recovery phrase. Rooq never sees your keys, can't recover them and can't reverse anything done with them. You are responsible for keeping your wallet, passkey and phrase safe, and for only signing the account message on Rooq.
+You control your private account. It comes from your wallet or a passkey. Rooq never sees your keys, can't recover them and can't reverse anything done with them. You are responsible for keeping your wallet and passkey safe, and for only signing the account message on Rooq.
 
 ## Trading risk
 

@@ -32,9 +32,7 @@ You can skip the wallet signature next time by remembering this device. Rooq sto
 
 ### Wallets that can't sign the same way twice
 
-Some smart-contract and multi-party wallets return a different signature each time, and those can't derive a stable key. Rooq checks for this at setup. If your wallet is one of them, use a passkey-derived account or a generated 24-word recovery phrase instead.
-
-If you use a generated phrase, write the 24 words down, in order, somewhere offline. Anyone who has them can spend your account, and nobody can recover them for you.
+Some smart-contract and multi-party wallets return a different signature each time, and those can't derive a stable key. Rooq checks for this at setup. If your wallet is one of them, use a passkey account instead.
 
 ## 4. Shield tokens
 
@@ -48,8 +46,8 @@ Your tokens show up in your private balance once the queue is processed, usually
 
 You're ready. Try a small [spot swap](/spot) first, then read [Perps](/perps) before you use leverage.
 
-Every private action makes a proof in your browser, which can take a little while on a slower device. The operation center tracks each step, and you can keep using the app while it runs.
+Every action you sign starts with a proof made in your browser, which can take a little while on a slower device. Some later steps, like matching a perp, paying funding or liquidating, are proved by Rooq's services. They never receive your keys. The operation center tracks each step, and you can keep using the app while it runs.
 
 ## What to keep safe
 
-If you signed with your wallet, keep your wallet safe and you can restore your private account on any device. If you use a passkey or a generated recovery phrase, keep those safe instead. [Recovery](/recovery) explains what you can get back and how.
+If you signed with your wallet, keep your wallet safe and you can restore your private account on any device. If you use a passkey account, keep that passkey safe instead. [Recovery](/recovery) explains what you can get back and how.

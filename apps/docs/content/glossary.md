@@ -58,9 +58,7 @@
 
 **Proof.** A cryptographic check that a private action follows the rules without showing its details.
 
-**Private account.** The keys that hold your private balance. They come from one wallet signature, or from a passkey or a generated phrase.
-
-**Recovery phrase.** A generated set of 24 words, for wallets that can't sign the same way twice. They spend and restore that account.
+**Private account.** The keys that hold your private balance. They come from one wallet signature, or from a passkey. Those are separate accounts.
 
 **Relayer.** A service that pays gas and submits your proofs, so your public wallet isn't involved.
 

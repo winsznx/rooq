@@ -70,7 +70,7 @@ Your wallet is your public address on the chain. Your private account holds your
 
 ### Do I need to back up a seed phrase?
 
-No, in most cases. If your wallet can sign the same message the same way twice, the same wallet restores your account on any device. Some smart-contract and multi-party wallets can't, so those use a passkey or a generated 24-word phrase, which you do need to keep safe.
+No, in most cases. If your wallet can sign the same message the same way twice, the same wallet restores your account on any device. Some smart-contract and multi-party wallets can't, so those use a passkey account. Keep that passkey synced and safe, since it's the only way back into that account.
 
 ### Is signing the message safe?
 
@@ -78,7 +78,7 @@ Only sign it on Rooq. Anyone who gets that same signature gets your private acco
 
 ### What if I lose my wallet?
 
-Your private account goes with it, unless you also set up a passkey or a generated phrase. Nobody can recover it for you.
+The private account derived from that wallet goes with it. Nobody can recover it for you.
 
 ### What if I lose my device?
 

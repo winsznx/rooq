@@ -42,7 +42,7 @@ Your wallet, RPC provider and network provider can see your activity under their
 
 ## Your choices
 
-You can use a VPN or Tor. You can clear your browser data whenever you want. Your wallet and any passkey or phrase are yours to manage.
+You can use a VPN or Tor. You can clear your browser data whenever you want. Your wallet and any passkey are yours to manage.
 
 Rooq doesn't hold personal data about you, so there's usually nothing to give you, change or delete. If you have a question or a request, write to [{{support_email}}](mailto:{{support_email}}).
 
