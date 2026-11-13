@@ -2,10 +2,28 @@
 
 Addresses are keyed by environment and chain id. Only real broadcasts are recorded here; dry runs write `*.dryrun.json` and are never published.
 
-## Robinhood Chain testnet (46630)
-Not deployed. Blocked on a funded deployer key. Run `scripts/deploy-testnet.sh` (dry run, typed confirmation, broadcast, bootstrap, explorer verification, address sync), then record here: deployer, every contract address, deployment tx hash and block, verification URL and the git commit.
+## Robinhood Chain testnet (46630), private system
 
-Dry run on 2026-11-07 against live testnet state: success, 43,896,008 gas, about 0.00088 ETH at 0.02 gwei (`docs/evidence/03-testnet-deploy-dryrun.txt`).
+Deployed 2026-11-09 from block 150630822. Record: [contracts/deployments/privacy-46630.json](../contracts/deployments/privacy-46630.json). Source verified on Sourcify; `PrivatePairs` is also verified on the [testnet explorer](https://explorer.testnet.chain.robinhood.com/address/0x6b3dEA9d7C3FaCbFd8Eb78c101f0C0fF45648DF5?tab=contract).
+
+| Contract | Address |
+|---|---|
+| PrivatePairs (custody, note tree, perps) | `0x6b3dEA9d7C3FaCbFd8Eb78c101f0C0fF45648DF5` |
+| PrivateSpot | `0x0F792918dC1949de932AC11446fba82beBa32404` |
+| PrivateMarkets | `0xDCec34FAECaFC1A988b8854521DaBBb1E40bC4af` |
+| OracleAdapter | `0x696949Bd13565f3A8364543D6bC8aCfF1e928c79` |
+
+| Market | Market and pool id | Price feed |
+|---|---|---|
+| TSLA | 1 | `0x6266a7d494fD35aEC096aBf2De04c2A814220BDf` |
+| AMZN | 2 | `0xF40F0C617D2D02A06a0C39092A2FE4F4315E3A9d` |
+| PLTR | 3 | `0x650dB349dc43053712f4F39c30d79461090f327e` |
+| NFLX | 4 | `0x5790F932319Fa43938Db2AC50458F5844bd92210` |
+| AMD | 5 | `0xFC4D029560eC1B461d8Dedd7e9a27f1343308ae0` |
+
+Key guardian and price relay operator: `0xc1207E46F4F5322033685131a0E2640f2D3324da` and `0x109204c94872210cC9D666A284Ba4069c6DE2E55`.
+
+The transparent reference build (`scripts/deploy-testnet.sh`) was never deployed to testnet.
 
 ### Third-party assets verified on 46630 (2026-11-07)
 | Asset | Address | How verified |
