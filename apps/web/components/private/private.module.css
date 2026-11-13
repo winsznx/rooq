@@ -50,7 +50,11 @@
 .address { display: inline-flex; min-width: 0; font-family: var(--rq-font-data-stack); font-size: 12px; white-space: nowrap; }
 .addressHead { width: 18ch; overflow: hidden; }
 @media (max-width: 519px) { .addressHead { width: 12ch; } }
-.rowLine:has(> .address) > :first-child { flex: none; }
+.rowLine:has(> .address) > :first-child, .rowLine:has(> .addressCopy) > :first-child { flex: none; }
+.addressCopy { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.addressCopy :global(.btn) { gap: 6px; flex: none; }
+.addressBlock { display: grid; gap: 4px; }
+.addressHint { margin: 0; font-size: 12px; color: var(--rq-ink-tertiary); }
 .balanceRow { flex-wrap: wrap; align-items: center; }
 .balanceValue { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
 .balanceActions { display: inline-flex; gap: 4px; }

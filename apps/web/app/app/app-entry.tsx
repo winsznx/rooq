@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useSyncExternalStore } from "react";
 import { useAccount } from "wagmi";
 import type { Route } from "next";
+import { FAUCETS } from "@rooq/config";
 import { copy } from "@rooq/ui";
 import { usePrivate } from "@/lib/private/client";
 import { findListed, listedMarkets, type ListedMarket } from "@/lib/private/market-list";
@@ -170,7 +171,10 @@ function Guide() {
         </li>
         <li>
           <strong>Add test money</strong>
-          Shield test tokens from your wallet.
+          <span>
+            Get free test ETH and Stock Tokens from the <a href={FAUCETS.robinhood} target="_blank" rel="noreferrer">Robinhood Chain faucet</a> and USDG from the{" "}
+            <a href={FAUCETS.paxos} target="_blank" rel="noreferrer">Paxos faucet</a>, then shield them.
+          </span>
         </li>
         <li>
           <strong>Pick a market</strong>

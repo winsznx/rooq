@@ -1,9 +1,10 @@
 "use client";
 
+import { FAUCETS } from "@rooq/config";
 import { useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { erc20Abi, parseAbi, type Abi, type Hex } from "viem";
-import { formatFixed, parseDecimal } from "@rooq/sdk";
+import { formatFixed, parseDecimal, toDecimalInput } from "@rooq/sdk";
 import { useTxRunner } from "@/lib/tx";
 import { privatePublicClient } from "@/lib/private/public-client";
 import { wallet, WalletError } from "@/lib/private/client";
@@ -13,7 +14,8 @@ import { AmountField } from "@/components/funds/amount-field";
 import { Segmented } from "@/components/primitives";
 import { TxProgress } from "@/components/feedback/tx-progress";
 import { WalletGate } from "@/components/wallet";
-import { amountText, Line, PV, styles, TokenLabel, tokenOf, useView } from "./kit";
+import { Check, Copy } from "@/components/icons";
+import { amountText, Line, PV, styles, TokenLabel, tokenOf, useView, withAccount } from "./kit";
 
 const SHIELD_ABI = parseAbi(["function shield(address asset, uint256 amount, bytes32 inner) returns (uint256)"]);
 
@@ -71,6 +73,10 @@ function ShieldForm({ open, onOpenChange, view }: { open: boolean; onOpenChange:
     <Dialog open={open} onOpenChange={(o) => { if (!busy) { onOpenChange(o); reset(); } }} title="Shield" description="Moves tokens from your public wallet into your private balance. This deposit is public: anyone can see the wallet, the token and the amount." width={460}>
       <div className={styles.stack}>
         <AssetSelect tokens={tokens} value={asset} onChange={setAsset} />
+        <p className="t-small faint" style={{ margin: 0 }}>
+          Need test funds? Test ETH and Stock Tokens come from the <a href={FAUCETS.robinhood} target="_blank" rel="noreferrer">Robinhood Chain faucet</a>, USDG from the{" "}
+          <a href={FAUCETS.paxos} target="_blank" rel="noreferrer">Paxos faucet</a>.
+        </p>
         <AmountField label="Amount" value={text} onChange={setText} decimals={t.decimals} unit={t.symbol} />
         <TxProgress steps={steps} />
         {note ? <p className="notice" role="status">{note}</p> : null}
@@ -123,7 +129,7 @@ export function UnshieldDialog({ open, onOpenChange, initial }: { open: boolean;
     <Dialog open={open} onOpenChange={onOpenChange} title="Unshield" description="Sends tokens from your private balance to a public address. The amount and recipient are public. Your private history and the link to your other activity are not." width={480}>
       <div className={styles.stack}>
         <AssetSelect tokens={view.tokens} value={a} onChange={setAsset} />
-        <AmountField label="Amount" value={text} onChange={setText} decimals={t.decimals} unit={t.symbol} balanceLabel="Private balance" balance={bal?.free ?? null} onMax={bal ? () => setText(formatFixed(bal.free - fee > 0n ? bal.free - fee : 0n, t.decimals, t.decimals)) : undefined} />
+        <AmountField label="Amount" value={text} onChange={setText} decimals={t.decimals} unit={t.symbol} balanceLabel="Private balance" balance={bal?.free ?? null} onMax={bal ? () => setText(toDecimalInput(bal.free - fee > 0n ? bal.free - fee : 0n, t.decimals)) : undefined} />
         <div className="field">
           <label className="field-label" htmlFor="unshield-to"><span>Recipient address</span></label>
           <input id="unshield-to" className="input-text" placeholder={address ?? "0x..."} value={to} onChange={(e) => setTo(e.target.value.trim())} />
@@ -171,7 +177,7 @@ export function TransferDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         <AmountField label="Amount" value={text} onChange={setText} decimals={t.decimals} unit={t.symbol} />
         <div className="field">
           <label className="field-label" htmlFor="xfer-to"><span>Their private address</span></label>
-          <input id="xfer-to" className="input-text" placeholder="rq1..." value={to} onChange={(e) => setTo(e.target.value)} />
+          <input id="xfer-to" className="input-text" placeholder="rooq1..." value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
         <RelayerFee view={view} asset={a} />
         {error ? <p className="field-error" role="alert">{error}</p> : null}
@@ -197,11 +203,13 @@ export function BalancesPanel({ onShield, onUnshield, onTransfer }: { onShield: 
       </div>
       {rows.map((b) => <BalanceRow key={b.asset} b={b} view={view} onUnshield={onUnshield} />)}
       {view.unlocked ? (
+        <PrivateAddress address={view.address} />
+      ) : (
         <div className={styles.rowLine}>
           <span>Your private address</span>
-          <span className={styles.address} data-testid="private-address" title={view.address}><span className={styles.addressHead}>{view.address.slice(0, 18)}</span>…{view.address.slice(-8)}</span>
+          <button type="button" className="btn btn-sm" onClick={() => withAccount(() => undefined)}>Open account to show it</button>
         </div>
-      ) : null}
+      )}
     </section>
   );
 }
@@ -223,6 +231,35 @@ function BalanceRow({ b, view, onUnshield }: { b: BalanceView; view: PrivateView
           {b.free > 0n ? <button type="button" className="btn btn-sm btn-ghost" onClick={() => onUnshield(b.asset)}>Unshield</button> : null}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+/** The address others paste into Send. It can't be looked up from a public wallet, so sharing it is the only way to be paid privately. */
+function PrivateAddress({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch (error) {
+      console.warn("rooq: private address not copied", error);
+    }
+  };
+  return (
+    <div className={styles.addressBlock}>
+      <div className={styles.rowLine}>
+        <span>Your private address</span>
+        <span className={styles.addressCopy}>
+          <span className={styles.address} data-testid="private-address" title={address}><span className={styles.addressHead}>{address.slice(0, 18)}</span>…{address.slice(-8)}</span>
+          <button type="button" className="btn btn-sm" onClick={() => void copy()} aria-label="Copy your private address">
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </span>
+      </div>
+      <p className={styles.addressHint}>Share this to receive privately. Nobody can find it from your public wallet.</p>
     </div>
   );
 }
