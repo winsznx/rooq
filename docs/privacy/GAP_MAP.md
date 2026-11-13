@@ -1,6 +1,6 @@
 # Private V1 gap map (W0)
 
-Source of truth: `internal/ROOQ_PRODUCT_SPEC/01-PRODUCT/PRIVATE_V1_ADDENDUM.md` (rev 1.0, 8 Nov 2026).
+Source of truth: the private V1 addendum in Rooq's product spec (rev 1.0, 8 Nov 2026), which is kept outside this repository.
 Inspected on 2026-11-08 against the working tree (no commits exist yet in this repository).
 
 The existing code is a transparent reference implementation: every balance, pair, fill, quote, LP share and
