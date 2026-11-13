@@ -1,58 +1,68 @@
-# rooq
+# Rooq
 
-Private trading for Stock Tokens on Robinhood Chain testnet (chain 46630): shielded balances, private spot pools and private 2x perps on five markets (TSLA, AMZN, PLTR, NFLX, AMD). Testnet only. It has not been audited, the risk settings aren't calibrated, and test assets have no value.
+Private markets for Stock Tokens on Robinhood Chain. Swap TSLA, AMZN, PLTR, NFLX and AMD, trade their price with up to 2x leverage, provide liquidity or back perps as a maker, without your balances or positions showing on chain.
 
-The private system (`contracts/src/privacy`, `zk/circuits`, `packages/private-sdk`, `apps/private-services`) is the product. It works end to end on local chains with real proofs and has not been deployed to testnet yet. Prices come from a single-operator TEST relay of Robinhood's public price API, because no Chainlink feeds are published for this testnet. The transparent reference build (`contracts/src/perps`, `apps/maker`, `apps/indexer`, `apps/api`) is older and is not private.
+Live on Robinhood Chain testnet (chain 46630). Test assets have no value. Rooq has not been audited.
 
-Status, evidence and open gaps: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Running the backend on a server: [docs/privacy/VPS_RUNBOOK.md](docs/privacy/VPS_RUNBOOK.md). Product and design specs: `internal/ROOQ_PRODUCT_SPEC/` (never served publicly).
+- App: https://rooq.trade
+- Docs: https://docs.rooq.trade
+- API health: https://api.rooq.trade/health
+- Status: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 
-Build agents must read the [private V1 implementation addendum](internal/ROOQ_PRODUCT_SPEC/01-PRODUCT/PRIVATE_V1_ADDENDUM.md) before extending the current implementation. It defines the required privacy model, complete release scope, recovery paths and acceptance evidence.
+## How it works
 
-## Layout
+Funds enter by shielding, a public deposit into the `PrivatePairs` contract. After that, balances live as notes: Poseidon2 commitments in a depth-32 Merkle tree, encrypted to the owner, spent with a zero-knowledge proof and a nullifier. Swaps, perps, liquidity and transfers are proven in Noir and checked on chain by generated UltraHonk verifiers. A relayer submits the transactions, so the user's wallet never signs them. Withdrawals (unshields) are public.
+
+Not everything is hidden from everyone. The coordinator sees the terms of the locks it matches, risk workers decrypt open positions so funding and liquidation work while traders are offline, and both see one-time addresses rather than wallets. [How privacy works](https://docs.rooq.trade/how-privacy-works) lists exactly who sees what.
+
+## Repository layout
 
 | Path | What it is |
 |---|---|
-| `contracts/` | Foundry. Private system in `src/privacy/` (PrivatePairs, PrivateSpot, PrivateMarkets, generated Honk verifiers), transparent reference contracts in `src/perps`, `src/spot`, `src/market`, shared `src/oracle`. Tests in `test/`, deploy scripts in `script/` |
-| `zk/circuits/` | Noir circuits for custody, perps, spot and recovery, compiled by `build.sh` |
-| `packages/private-sdk/` | Notes, keys, witnesses, encryption and proving, used by the browser and the services |
-| `apps/private-services/` | Read API, relayer, queue, coordinator, two risk workers, maker and TEST price relay, one process each |
-| `crates/risk-kernel/` | Rust reference model of the settlement math; generates the parity vectors |
-| `packages/sdk/` | Typed ABIs, EIP-712 quote types, estimators with contract parity, error mapping, formatting |
-| `packages/config/` | Chains, verified testnet assets, deployed addresses |
-| `packages/ui/` | Brand tokens and the canonical copy deck, synced from the spec |
-| `apps/web/` | Next.js app on http://localhost:3200 |
-| `apps/maker/` | Transparent reference build: quote signer, TEST oracle relay, keeper |
-| `apps/indexer/`, `apps/api/` | Transparent reference build: Postgres indexer and REST/SSE API on http://127.0.0.1:8700/api/v1 |
-| `e2e/` | Onchain walkthrough, Playwright browser flow, accessibility suite, screenshot tool |
-| `config/` | Provisional risk tiers (`risk-testnet.json`) and per-environment deploy configs |
-| `infra/vps/` | systemd unit, env-file generator, release builder, health check and Caddy config for a Linux server |
-| `docs/` | ADRs, test plan, deployments, risks, evidence, screenshots |
+| `contracts/` | Foundry. The private system is in `src/privacy/`: `PrivatePairs` (custody, note tree, perps, funding, forced exits), `PrivateSpot` (pools and liquidity), `PrivateMarkets` (market settings, bonds, key rotation) and the generated verifiers. Tests in `test/`, deploy scripts in `script/`, broadcasts in `deployments/` |
+| `zk/circuits/` | 17 Noir circuits (custody, spot, liquidity, perps, funding, liquidation, exits, insurance) plus a math probe. `build.sh` compiles them and writes the Solidity verifiers |
+| `packages/private-sdk/` | Notes, keys, witnesses, encryption, proving and chain scanning. Used by the browser and the services |
+| `apps/private-services/` | Read API, relayer, queue, coordinator, two risk workers, maker and the test price relay, one process each |
+| `apps/web/` | Next.js app: landing page and the private trading app |
+| `apps/docs/` | Next.js documentation site |
+| `crates/risk-kernel/` | Rust reference model of the settlement math. Generates the parity vectors that contracts, circuits and SDK are tested against |
+| `packages/sdk/`, `packages/config/`, `packages/ui/` | Fixed-point math and formatting, chain and asset config, design tokens and copy |
+| `e2e/` | End-to-end flows with real proofs, browser flows and screenshot tooling |
+| `infra/vps/` | systemd units, env-file generator, release builder, health check and Caddy config |
+| `docs/` | Architecture decisions, privacy design notes, deployments, test evidence and screenshots |
+
+`contracts/src/perps`, `src/spot`, `src/market`, `apps/maker`, `apps/indexer` and `apps/api` are an earlier transparent reference build. They are not private and are not what runs at rooq.trade.
 
 ## Requirements
-Node 24, pnpm 12, Bun 1.4, Foundry 1.7, Rust 1.94, PostgreSQL 16 on the `/tmp` socket (local).
 
-## Run everything locally
+Node 24, pnpm 12, Bun 1.4, Foundry 1.7, Rust 1.94, nargo 1.0.0 and bb 5.3.0 for the circuits. PostgreSQL 16 for the reference build only.
 
+## Run locally
+
+    pnpm install
     pnpm dev:all
 
-Starts both local chains, the deployed contracts, the indexer and API, the maker and risk services, the private services, and the web app on http://localhost:3200. `scripts/local-up.sh` is the source of truth for ports and logs (`.local-logs/`).
-
-Then open http://localhost:3200. With `NEXT_PUBLIC_LOCAL_TEST_WALLET=1` in `apps/web/.env.local`, the connect dialog offers a "Local test wallet" that signs with an anvil dev account, so every action is a real local transaction.
+This starts local chains, deploys the contracts, and runs the services and the web app on http://localhost:3200. `scripts/local-up.sh` is the source of truth for ports and logs (`.local-logs/`). With `NEXT_PUBLIC_LOCAL_TEST_WALLET=1` in `apps/web/.env.local`, the connect dialog offers a local test wallet backed by an anvil dev account.
 
 ## Tests
 
 ```bash
-cd contracts && forge test                                   # unit, fuzz, invariant, parity
+(cd zk/circuits && nargo compile --workspace)                # compile the circuits first
+(cd contracts && forge test)                                 # unit, fuzz, invariant and parity tests
+cargo test --workspace                                       # Rust risk kernel
+pnpm --filter @rooq/private-sdk test                         # SDK against the compiled circuits, real proofs
 pnpm --filter @rooq/private-services test                    # service unit tests
-cd e2e && RPC=http://127.0.0.1:8547 bun run private/offline-liquidation.ts  # private perps lifecycle, real proofs (needs anvil on 8547 with --code-size-limit 100000)
+(cd e2e && RPC=http://127.0.0.1:8547 bun run private/offline-liquidation.ts)  # full perps lifecycle, real proofs
 ```
 
-Last results and evidence paths are in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+CI runs all of these except the end-to-end flows on every push. Recorded results are in [docs/privacy/evidence/](docs/privacy/evidence/).
 
-## Deploy private V1 to Robinhood Chain testnet
+## Deployment
 
-Not done yet. `scripts/deploy-private-testnet.sh` simulates against the live chain; it fetches current prices, deploys five tier B markets, and prints the web app's `NEXT_PUBLIC_PRIVATE_MARKET_MAP` and `NEXT_PUBLIC_PRIVATE_POOL_MAP`. Pass `--broadcast` to deploy for real. Keys stay in the macOS Keychain. Then follow [docs/privacy/VPS_RUNBOOK.md](docs/privacy/VPS_RUNBOOK.md) to run the services.
+The testnet deployment is recorded in [contracts/deployments/privacy-46630.json](contracts/deployments/privacy-46630.json) and listed in [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md). Contracts are source-verified on Sourcify, and `PrivatePairs` is also verified on the [testnet explorer](https://explorer.testnet.chain.robinhood.com/address/0x6b3dEA9d7C3FaCbFd8Eb78c101f0C0fF45648DF5?tab=contract).
 
-The older transparent deployment script (`scripts/deploy-testnet.sh`) still exists for the reference build.
+`scripts/deploy-private-testnet.sh` deploys a fresh instance (simulates by default, `--broadcast` to deploy). [docs/privacy/VPS_RUNBOOK.md](docs/privacy/VPS_RUNBOOK.md) covers running the services on a server. Mainnet is disabled in code.
 
-Mainnet is disabled in code and needs an audit, quant review and legal review first.
+## License
+
+Contracts carry their license in each file's SPDX header (BUSL-1.1 for the private system, Apache-2.0 and MIT elsewhere).
