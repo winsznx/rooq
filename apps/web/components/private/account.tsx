@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState,  } from "react";
+import { useEffect, useState } from "react";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { useAccount, useSignMessage } from "wagmi";
+import { useAccount, useSignMessage, useSwitchChain, useWalletClient } from "wagmi";
+import { CHAIN_CONFIG } from "@/lib/env";
 import { Dialog } from "@/components/feedback/dialog";
 import { setHideValues } from "@/lib/preferences";
 import { ACCOUNT_MESSAGE } from "@/lib/private/account";
@@ -58,6 +59,9 @@ function Sheet({ address }: { address: string | undefined }) {
   const { status, remembered, verified, sheetOpen } = usePrivate();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const { signMessageAsync } = useSignMessage();
+  const { chainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const { data: walletClient } = useWalletClient();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [nonDeterministic, setNonDeterministic] = useState(false);
@@ -71,7 +75,8 @@ function Sheet({ address }: { address: string | undefined }) {
       if (!verified) setHideValues(true);
     } catch (err) {
       const rejected = err instanceof Error && (err.name === "UserRejectedRequestError" || /rejected|denied/i.test(err.message));
-      setError(rejected ? "You declined in your wallet. Nothing changed." : err instanceof WalletError ? err.message : "Your wallet couldn't complete this. Nothing changed.");
+      if (!rejected) console.warn("rooq: account step failed", err);
+      setError(rejected ? "You declined in your wallet. Nothing changed." : err instanceof WalletError ? err.message : `Your wallet couldn't complete this: ${walletDetail(err)}. Nothing changed.`);
       if (err instanceof WalletError && err.reason === "NON_DETERMINISTIC") setNonDeterministic(true);
     } finally {
       setBusy(null);
@@ -80,6 +85,18 @@ function Sheet({ address }: { address: string | undefined }) {
 
   const sign = () =>
     run("Waiting for your wallet", async () => {
+      if (chainId !== CHAIN_CONFIG.chainId) {
+        setBusy(`Switching your wallet to ${CHAIN_CONFIG.name}`);
+        await switchChainAsync({ chainId: CHAIN_CONFIG.chainId });
+        setBusy("Waiting for your wallet");
+      }
+      // A remembered connection can outlive the wallet's permission for this site. Asking again is instant when it still holds.
+      if (walletClient) {
+        const granted = await walletClient.requestAddresses();
+        if (!granted.some((a) => a.toLowerCase() === address?.toLowerCase())) {
+          throw new WalletError("ACCOUNT_NOT_AUTHORIZED", "Your wallet didn't share this account with Rooq. Pick it in your wallet and try again.");
+        }
+      }
       const first = await signMessageAsync({ message: ACCOUNT_MESSAGE });
       if (verified) {
         await wallet.openSigned(address!, first);
@@ -194,4 +211,13 @@ export function AccountSettings() {
       <DeviceLoss />
     </section>
   );
+}
+
+/** The wallet's own short reason, so a failure says what actually went wrong. */
+function walletDetail(err: unknown): string {
+  if (err instanceof Error) {
+    const short = "shortMessage" in err && typeof err.shortMessage === "string" ? err.shortMessage : err.message;
+    return short.split("\n")[0]!.replace(/\.$/, "").slice(0, 140);
+  }
+  return "unknown error";
 }
