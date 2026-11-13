@@ -55,7 +55,7 @@ pnpm --filter @rooq/private-services test                    # service unit test
 (cd e2e && RPC=http://127.0.0.1:8547 bun run private/offline-liquidation.ts)  # full perps lifecycle, real proofs
 ```
 
-CI runs all of these except the end-to-end flows on every push. Recorded results are in [docs/privacy/evidence/](docs/privacy/evidence/).
+CI runs a quick install, typecheck and SDK test on every push. The full suites run locally. Recorded results are in [docs/privacy/evidence/](docs/privacy/evidence/).
 
 ## Deployment
 

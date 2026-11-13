@@ -23,10 +23,11 @@ The full loop ran on the production site with a real wallet and real proofs: ope
 
 | Suite | What it covers | In CI |
 |---|---|---|
-| `forge test` | Contracts: unit, fuzz, invariant and parity against the Rust kernel | Yes |
-| `cargo test --workspace` | Rust risk kernel and vector generation | Yes |
-| `@rooq/private-sdk` | Notes, keys, encryption, scanning and real proofs against the compiled circuits | Yes |
-| `@rooq/private-services` | Service unit tests | Yes |
+| `forge test` | Contracts: unit, fuzz, invariant and parity against the Rust kernel | Local |
+| `cargo test --workspace` | Rust risk kernel and vector generation | Local |
+| `@rooq/sdk` | Fixed-point math and formatting | Yes |
+| `@rooq/private-sdk` | Notes, keys, encryption, scanning and real proofs against the compiled circuits | Local |
+| `@rooq/private-services` | Service unit tests | Local |
 | `e2e/private/*.ts` | Shielded flow, spot flow and the full perps lifecycle with real proofs on a local chain | No, run by hand. Results in [docs/privacy/evidence/](docs/privacy/evidence/) |
 
 ## Known limits on testnet
