@@ -31,6 +31,18 @@ jobs:
         run: pnpm -r --filter=./packages/* --filter=./apps/* --filter=./e2e exec tsc --noEmit
       - name: Unit tests (SDK)
         run: pnpm --filter @rooq/sdk test
+      - name: Install Noir
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
+          "$HOME/.nargo/bin/noirup" --version 1.0.0
+          echo "$HOME/.nargo/bin" >> "$GITHUB_PATH"
+      - name: Compile circuits
+        working-directory: zk/circuits
+        run: nargo compile --workspace
+      - name: Unit tests (private SDK, real proofs)
+        run: pnpm --filter @rooq/private-sdk test
+      - name: Unit tests (private services)
+        run: pnpm --filter @rooq/private-services test
       - name: Contracts (unit, fuzz, invariant, parity)
         working-directory: contracts
         run: forge test
