@@ -1,12 +1,14 @@
 // Executes an owner's removal request against the private pool state (SPOT-04). Same arithmetic as SpotPool.removeLiquidity.
-// The owner's minimums and expiry bind, and the output can only go to the owner committed in the claim. Unlike every other
+// The owner's price band and expiry bind, and the output can only go to the owner committed in the claim. Unlike every other
 // transition this keeps the leaf order rule but never needs a fresh price, so LPs can leave in any market state (D-04).
 use rooq_zk::{
-    encrypt, floor_div, FREE_DOMAIN, LpClaim, merkle_root, note_commitment, note_inner, NOTE_CT_LEN, output_rho, owner_tag, point, POOL_CT_LEN,
+    assert_price_in_band, encrypt, floor_div, FREE_DOMAIN, LpClaim, merkle_root, note_commitment, note_inner, NOTE_CT_LEN, output_rho, owner_tag, point, POOL_CT_LEN,
     pool_head, pool_plaintext, PoolState, rec_nullifier, TREE_DEPTH,
 };
 
 global KEYS: u32 = 3;
+
+mod tests;
 
 fn main(
     claim: LpClaim,
@@ -44,10 +46,18 @@ fn main(
     assert(state.supply != 0, "empty pool");
     assert(!state.supply.lt(claim.shares), "shares above supply");
 
+    assert_price_in_band(state.r0, state.r1, claim.price_lo, claim.price_hi);
+
     let (a0, a1) = (floor_div(claim.shares * state.r0, state.supply), floor_div(claim.shares * state.r1, state.supply));
-    assert(!a0.lt(claim.min0), "below minimum output");
-    assert(!a1.lt(claim.min1), "below minimum output");
-    let next = PoolState { r0: state.r0 - a0, r1: state.r1 - a1, supply: state.supply - claim.shares, last_leaf: leaf, blind: new_blind };
+    let next = PoolState {
+        r0: state.r0 - a0,
+        r1: state.r1 - a1,
+        supply: state.supply - claim.shares,
+        last_leaf: leaf,
+        proto0: state.proto0,
+        proto1: state.proto1,
+        blind: new_blind,
+    };
     assert_eq(pool_head(deployment, pool, next), new_head);
     let plain = pool_plaintext(next);
     for i in 0..KEYS {

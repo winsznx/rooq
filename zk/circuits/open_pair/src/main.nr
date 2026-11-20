@@ -7,14 +7,19 @@
 // LIQ-04, REC-01): the coordinator cannot open a valid position whose risk data the workers cannot read.
 // Unused maker backing returns to the maker as a FREE note.
 //
+// The maker's standing close spread is capped per market, so a taker never commits to an exit cost above what the market
+// publishes. The pair is stamped with `now` as its last update, which starts the update cooldown.
+//
 // The taker pays the market fee from its lock as a shielded note to the contract-fixed fee address. Open interest is
 // bounded against the last folded market record plus a worst case for everything not folded yet. The fill appends a hidden open-interest change that
 // funding_epoch folds later (D-08).
 use rooq_zk::{
     assert_amount, below, BPS, fee, market_head, notional_up, owner_tag, ceil_div, encrypt, floor_div, FREE_DOMAIN, Lock, margin_requirement,
-    FUNDING_BITS, merkle_root, note_commitment, note_inner, NOTE_CT_LEN, oi_delta, output_rho, Pair, PAIR_CT_LEN, pair_pnl, point,
+    FUNDING_BITS, merkle_root, note_commitment, note_inner, NOTE_CT_LEN, OI_OPEN, oi_delta, output_rho, Pair, PAIR_CT_LEN, pair_pnl, point,
     PRICE_BITS, rec_nonce, rec_nullifier, ROLE_MAKER, ROLE_TAKER, TREE_DEPTH,
 };
+
+mod tests;
 
 struct Held {
     lock: Lock,
@@ -70,6 +75,7 @@ fn main(
     oi_pending: pub Field,
     max_oi_usd: pub Field,
     max_pair_size: pub Field,
+    max_close_spread: pub Field,
 ) {
     let t = taker.lock;
     let m = maker.lock;
@@ -101,6 +107,8 @@ fn main(
     }
     assert(!m.t3.lt(size), "size above maker maximum");
     assert(!max_pair_size.lt(size), "size above market maximum");
+    max_close_spread.assert_max_bit_size::<14>();
+    assert(!max_close_spread.lt(m.t4), "close spread above market cap");
 
     if head == 0 {
         assert_eq(long_oi, 0);
@@ -135,6 +143,7 @@ fn main(
         funding_debt: 0,
         debt_by_taker: 0,
         last_reduce: 0,
+        updated_at: now,
         taker_margin,
         maker_margin,
         taker_auth: t.owner_auth,
@@ -147,7 +156,7 @@ fn main(
         blind: pair_blind,
     };
     assert_eq(pair.commit(deployment), cm_pair);
-    assert_eq(oi_delta(deployment, market, is_short, size, 0, 0, 0, pair.rec_nonce), delta_cm);
+    assert_eq(oi_delta(deployment, market, is_short, size, OI_OPEN, 0, 0, pair.rec_nonce), delta_cm);
     let pt = pair.plaintext();
     let keys = [
         point(t.owner_x, t.owner_y), point(m.owner_x, m.owner_y), point(risk_pk[0][0], risk_pk[0][1]),

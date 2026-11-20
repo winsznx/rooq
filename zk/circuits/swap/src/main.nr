@@ -1,15 +1,21 @@
 // Executes a swap intent against one pool or two (SPOT-01..03, D-18). The operator proves it from the intent's committed
 // limits and the private pool state. The trader's limits bind: asset in, amount, minimum out, route, payout address, expiry.
 //
-// Intents run in increasing tree order per pool, so an operator cannot reorder trades or place its own ahead of one it has
-// already seen. It can only leave an intent out, and that intent refunds at expiry. A two-hop route settles atomically in one
-// proof, so no intermediate asset is ever held.
+// Intents run in increasing tree order per pool, so the operator can't reorder the intents it runs. It can still
+// front-run: a pool-key holder can keep its own intents at earlier leaves, run one just before a trader's, and let
+// the rest expire. A skipped intent can never run and refunds at expiry. The trader's minimum output is the only
+// price protection. A two-hop route settles atomically in one proof, so no intermediate asset is ever held.
+//
+// `protocol_bps` moves that share of each hop's fee out of the input reserve into the pool's protocol accrual, paid out
+// later by sweep_protocol. The trader's output already prices the whole fee, so it doesn't change.
 use rooq_zk::{
     amount_out, encrypt, FREE_DOMAIN, Lock, merkle_root, note_commitment, note_inner, NOTE_CT_LEN, output_rho, point, POOL_CT_LEN,
-    pool_head, pool_plaintext, PoolState, rec_nullifier, RESERVE_BITS, ROLE_SWAP, TREE_DEPTH,
+    pool_head, pool_plaintext, PoolState, protocol_cut, rec_nullifier, RESERVE_BITS, ROLE_SWAP, TREE_DEPTH,
 };
 
 global KEYS: u32 = 3;
+
+mod tests;
 
 struct Hop {
     state: PoolState,
@@ -24,6 +30,7 @@ fn apply(
     token0: Field,
     token1: Field,
     fee_bps: Field,
+    protocol_bps: Field,
     leaf: Field,
     deployment: Field,
     pool: Field,
@@ -40,10 +47,14 @@ fn apply(
     let (r_in, r_out) = if zero_for_one { (s.r0, s.r1) } else { (s.r1, s.r0) };
     let out = amount_out(amount_in, r_in, r_out, fee_bps);
     assert(out != 0, "zero output");
-    let (r_in_next, r_out_next) = (r_in + amount_in, r_out - out);
+    let cut = protocol_cut(amount_in, fee_bps, protocol_bps);
+    let (r_in_next, r_out_next) = (r_in + amount_in - cut, r_out - out);
     r_in_next.assert_max_bit_size::<RESERVE_BITS>();
     let (r0, r1) = if zero_for_one { (r_in_next, r_out_next) } else { (r_out_next, r_in_next) };
-    let next = PoolState { r0, r1, supply: s.supply, last_leaf: leaf, blind: h.new_blind };
+    let (proto0, proto1) = if zero_for_one { (s.proto0 + cut, s.proto1) } else { (s.proto0, s.proto1 + cut) };
+    proto0.assert_max_bit_size::<RESERVE_BITS>();
+    proto1.assert_max_bit_size::<RESERVE_BITS>();
+    let next = PoolState { r0, r1, supply: s.supply, last_leaf: leaf, proto0, proto1, blind: h.new_blind };
     assert_eq(pool_head(deployment, pool, next), new_head);
     let plain = pool_plaintext(next);
     for i in 0..KEYS {
@@ -70,6 +81,7 @@ fn main(
     token0: pub [Field; 2],
     token1: pub [Field; 2],
     fee_bps: pub [Field; 2],
+    protocol_bps: pub [Field; 2],
     head: pub [Field; 2],
     new_head: pub [Field; 2],
     ct_pool: pub [[[Field; POOL_CT_LEN]; KEYS]; 2],
@@ -85,13 +97,13 @@ fn main(
     intent.amount.assert_max_bit_size::<RESERVE_BITS>();
     let leaf = index + 1;
 
-    let (first_out, first_asset) = apply(hop0, intent.amount, intent.asset, token0[0], token1[0], fee_bps[0], leaf, deployment, pool[0], head[0], new_head[0], keys, ct_pool[0]);
+    let (first_out, first_asset) = apply(hop0, intent.amount, intent.asset, token0[0], token1[0], fee_bps[0], protocol_bps[0], leaf, deployment, pool[0], head[0], new_head[0], keys, ct_pool[0]);
     let mut out = first_out;
     let mut asset = first_asset;
     if intent.t4 != 0 {
         assert_eq(intent.t4, pool[1], "wrong second pool");
         assert(pool[0] != pool[1], "same pool twice");
-        let (second_out, second_asset) = apply(hop1, first_out, first_asset, token0[1], token1[1], fee_bps[1], leaf, deployment, pool[1], head[1], new_head[1], keys, ct_pool[1]);
+        let (second_out, second_asset) = apply(hop1, first_out, first_asset, token0[1], token1[1], fee_bps[1], protocol_bps[1], leaf, deployment, pool[1], head[1], new_head[1], keys, ct_pool[1]);
         out = second_out;
         asset = second_asset;
     } else {

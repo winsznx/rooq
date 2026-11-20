@@ -1,0 +1,91 @@
+{
+  "bb": {
+    "platforms": {
+      "darwin-arm64": {
+        "binarySha256": "aebdd0ca41736fc604fe307890ffd6ecf48e628d2a557bc6878e96e367f4bfaf",
+        "sha256": "bb6e97bb2da04dbd151951be519b7ec00208b97b32db448794a98dfddb0e4ec0",
+        "url": "https://github.com/AztecProtocol/barretenberg/releases/download/v5.3.0/barretenberg-arm64-darwin.tar.gz"
+      },
+      "linux-amd64": {
+        "binarySha256": "875be5acdf40aad69bf1aed8e05c7a5b34ffc43cd897fe66078acbbf2b4fd93e",
+        "sha256": "673412eed80fa30aeaa1c688b1d1957dab8b04f3e94784e5c5fbc35cd07af9c0",
+        "url": "https://github.com/AztecProtocol/barretenberg/releases/download/v5.3.0/barretenberg-amd64-linux.tar.gz"
+      }
+    },
+    "version": "5.3.0"
+  },
+  "crs": {
+    "bn254G1CompressedPoints": 524288,
+    "bn254G1CompressedSha256": "1d03ebeb73e1a6d426e44a2ccc88b04125ca185ab9d1679817380502a723fa80",
+    "bn254G2Sha256": "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f",
+    "ceremony": "Aztec Ignition",
+    "grumpkinG1Points": 65536,
+    "grumpkinG1Sha256": "64236c9455e75aeea77a94587ea607eed2e978d2609a421d66bf10bb9698b8fd",
+    "source": "https://crs.aztec-cdn.foundation"
+  },
+  "docker": {
+    "baseImage": "debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc",
+    "platform": "linux/amd64"
+  },
+  "forge": {
+    "commit": "4072e48705af9d93e3c0f6e29e93b5e9a40caed8",
+    "platforms": {
+      "darwin-arm64": {
+        "binarySha256": "e729589084ca2f1479354353d1ec3d4789451b577f4cdee4e7dc57cae64a38fa",
+        "sha256": "eacdc67718fac857cad9e19c7f6729dd80de731d09df81856391d093cfcab547",
+        "url": "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_darwin_arm64.tar.gz"
+      },
+      "linux-amd64": {
+        "binarySha256": "4f77da0810de94325734855d0ad58d70640aa8a5b2a837608ddf8c26da34355c",
+        "sha256": "cf7e688ed0c4c48adffca788b496076e31060b67ac5afe1e43dbb5499c20c88b",
+        "url": "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_amd64.tar.gz"
+      }
+    },
+    "version": "1.7.1"
+  },
+  "js": {
+    "@aztec/bb.js": "5.3.0",
+    "@noir-lang/noir_js": "1.0.0"
+  },
+  "nargo": {
+    "noircCommit": "275d3ab1a5c916c6ea73e8d6b943f685f574500c",
+    "platforms": {
+      "darwin-arm64": {
+        "binarySha256": "f675c85e512d8bead65cf876d5e32bed3d394db3653f6feb90ccef2b2d2f34c9",
+        "sha256": "ac2166fc06fe289fd2524f9eb9da228550159c976e88c1013bfc6d0e0b4a2309",
+        "url": "https://github.com/noir-lang/noir/releases/download/v1.0.0/noir-aarch64-apple-darwin.tar.gz"
+      },
+      "linux-amd64": {
+        "binarySha256": "30707a7f7b372413a07c54a6376ac408418b4453901b3c479d3590eb1ec47842",
+        "sha256": "a62f5b44a6db8ca8f0c20f841aa788ea56776e5aaf2ebd672c02dcf397901264",
+        "url": "https://github.com/noir-lang/noir/releases/download/v1.0.0/noir-x86_64-unknown-linux-gnu.tar.gz"
+      }
+    },
+    "version": "1.0.0"
+  },
+  "poseidon": {
+    "commit": "e105cdd5c79c222860d53c5dfdb8fa8012b291c0",
+    "path": "zk/vendor/poseidon",
+    "tag": "v0.4.0",
+    "treeSha256": "49e5ca2797ca489ad70714ea3c1491f09f5523c003863f3e8ca1749c6d118e19",
+    "upstream": "https://github.com/noir-lang/poseidon"
+  },
+  "solc": {
+    "longVersion": "0.8.28+commit.7893614a",
+    "platforms": {
+      "darwin-arm64": {
+        "sha256": "81515b0e53deaa266d549545ccaac0a5a96e6d4e8201c77f673b2c710976d9ea",
+        "url": "https://binaries.soliditylang.org/macosx-amd64/solc-macosx-amd64-v0.8.28+commit.7893614a"
+      },
+      "linux-amd64": {
+        "sha256": "9a0fb7e0db2c0641dbae1c5cc645dc686820c83af516226abb1c0a2f76636f25",
+        "url": "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.28+commit.7893614a"
+      }
+    },
+    "version": "0.8.28"
+  },
+  "submodules": {
+    "contracts/lib/forge-std": "dc647cc030d9d65910d8f1172a0cde48d7106e32",
+    "contracts/lib/openzeppelin-contracts": "c64a1edb67b6e3f4a15cca8909c9482ad33a02b0"
+  }
+}

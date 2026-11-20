@@ -6,7 +6,7 @@ use std::embedded_curve_ops::{
     EmbeddedCurvePoint, EmbeddedCurveScalar, fixed_base_scalar_mul, multi_scalar_mul,
 };
 
-pub global RECORD_VERSION: Field = 1;
+pub global RECORD_VERSION: Field = 2;
 pub global TREE_DEPTH: u32 = 32;
 pub global AMOUNT_BITS: u32 = 100;
 pub global ADDRESS_BITS: u32 = 160;
@@ -43,6 +43,14 @@ pub global BPS: Field = 10_000;
 pub global PRICE_BITS: u32 = 96;
 pub global SIZE_BITS: u32 = 96;
 pub global TIME_BITS: u32 = 64;
+/// LP price bounds. With mixed decimals P = r1 * WAD / r0 can pass 2^96 (6 against 18 decimals reaches 1e34).
+pub global PRICE_BAND_BITS: u32 = 128;
+/// Band bounds that mean "no bound": a lower bound of 0 and an upper bound of 2^128 - 1.
+pub global PRICE_NO_LOWER: Field = 0;
+pub global PRICE_NO_UPPER: Field = 0xffffffffffffffffffffffffffffffff;
+/// Seconds after each pair cooldown during which only the taker may update, so maker and keyless updates cannot keep
+/// replacing the version a taker's reduce or remove was proved against.
+pub global TAKER_GRACE: Field = 120;
 
 /// Fields in an encrypted FREE note: domain, asset, value, rho, blind.
 pub global NOTE_PT_LEN: u32 = 5;
@@ -50,12 +58,12 @@ pub global NOTE_PT_LEN: u32 = 5;
 pub global NOTE_CT_LEN: u32 = NOTE_PT_LEN + 2;
 pub global LOCK_PT_LEN: u32 = 13;
 pub global LOCK_CT_LEN: u32 = LOCK_PT_LEN + 2;
-pub global PAIR_PT_LEN: u32 = 20;
+pub global PAIR_PT_LEN: u32 = 21;
 pub global PAIR_CT_LEN: u32 = PAIR_PT_LEN + 2;
 pub global MARKET_PT_LEN: u32 = 6;
 pub global CLAIM_PT_LEN: u32 = 11;
 pub global CLAIM_CT_LEN: u32 = CLAIM_PT_LEN + 2;
-pub global POOL_PT_LEN: u32 = 5;
+pub global POOL_PT_LEN: u32 = 7;
 pub global POOL_CT_LEN: u32 = POOL_PT_LEN + 2;
 pub global LP_PT_LEN: u32 = 10;
 pub global LP_CT_LEN: u32 = LP_PT_LEN + 2;
@@ -153,12 +161,60 @@ pub fn point(x: Field, y: Field) -> EmbeddedCurvePoint {
     EmbeddedCurvePoint { x, y }
 }
 
+/// The relay fee: a FREE note in the action's own asset to whoever relays it (M36 spec-fees). Amount and recipient are
+/// private and the note is always present, so a zero fee, sent by the wallet to itself, looks the same on chain as a paid
+/// one. Turning fees on is then relayer policy, with no redeploy.
+pub struct RelayFee {
+    pub value: Field,
+    pub auth: Field,
+    pub pk: EmbeddedCurvePoint,
+    pub blind: Field,
+    pub eph: Field,
+}
+
+impl RelayFee {
+    /// Commitment and ciphertext of the fee note. `index` must differ from every other output rho of the circuit.
+    pub fn note(
+        self,
+        deployment: Field,
+        asset: Field,
+        nf0: Field,
+        nf1: Field,
+        index: Field,
+    ) -> (Field, [Field; NOTE_CT_LEN]) {
+        assert_amount(self.value);
+        let rho = output_rho(nf0, nf1, index);
+        let inner = note_inner(owner_tag(self.auth, self.pk), rho, self.blind);
+        let cm = note_commitment(deployment, FREE_DOMAIN, asset, self.value, inner);
+        (cm, encrypt([FREE_DOMAIN, asset, self.value, rho, self.blind], self.pk, self.eph))
+    }
+}
+
+/// The caller still has to take `relay.value` out of something the prover is entitled to, and, on a path that needs no
+/// owner key, require that key for a nonzero fee: otherwise a prover holding only the plaintext could pay itself the
+/// owner's value.
+pub fn relay_fee_note(
+    deployment: Field,
+    asset: Field,
+    relay: RelayFee,
+    nf0: Field,
+    nf1: Field,
+    index: Field,
+    cm: Field,
+    ct: [Field; NOTE_CT_LEN],
+) {
+    let (expected_cm, expected_ct) = relay.note(deployment, asset, nf0, nf1, index);
+    assert_eq(expected_cm, cm, "wrong relay fee commitment");
+    assert_eq(expected_ct, ct, "wrong relay fee ciphertext");
+}
+
 /// Escrowed value with committed terms, consumable by the coordinator only as the terms allow, or refunded to
 /// its owner after `expiry`.
 ///   taker terms: t2 = is_short (0/1), t3 = size, t4 = limit price
 ///   maker terms: t2 = open spread in bps, t3 = maximum size, t4 = standing close spread in bps (D-10)
 ///   swap terms:  t2 = 0, t3 = minimum output, t4 = second pool id or 0; market is the first pool id
-///   LP add terms: t2 = side (0 token0, 1 token1), t3 = minimum shares, t4 = id linking the two locks; market is the pool id
+///   LP add terms: t2 = side (0 token0, 1 token1), t3 = price bound (side 0 lowest, side 1 highest accepted P),
+///                 t4 = id linking the two locks; market is the pool id
 pub struct Lock {
     pub asset: Field,
     pub amount: Field,
@@ -203,8 +259,14 @@ impl Lock {
         assert_amount(self.amount);
         assert(self.amount != 0, "empty lock");
         self.expiry.assert_max_bit_size::<TIME_BITS>();
-        self.t3.assert_max_bit_size::<SIZE_BITS>();
-        assert(self.t3 != 0, "zero size");
+        if self.role == ROLE_LP {
+            self.t3.assert_max_bit_size::<PRICE_BAND_BITS>();
+            // Side 0 carries the band's lower bound, where 0 means none. Side 1's upper bound is never 0.
+            assert((self.t3 != 0) | (self.t2 == 0), "empty band");
+        } else {
+            self.t3.assert_max_bit_size::<SIZE_BITS>();
+            assert(self.t3 != 0, "zero size");
+        }
         if self.role == ROLE_TAKER {
             assert(self.t2 * (self.t2 - 1) == 0, "side is 0 or 1");
             self.t4.assert_max_bit_size::<PRICE_BITS>();
@@ -236,6 +298,8 @@ pub struct Pair {
     pub debt_by_taker: Field,
     /// Size removed by the update that created this version; opens the matching open-interest change.
     pub last_reduce: Field,
+    /// When this version was created. The next update must wait out the contract's cooldown from here.
+    pub updated_at: Field,
     pub taker_margin: Field,
     pub maker_margin: Field,
     pub taker_auth: Field,
@@ -254,7 +318,7 @@ impl Pair {
             [
                 T_PAIR, deployment, RECORD_VERSION, self.market, self.asset, self.is_short, self.size, self.entry,
                 self.funding_index, self.close_spread, self.funding_debt, self.debt_by_taker,
-                self.last_reduce, self.taker_margin, self.maker_margin, self.taker_auth, self.taker_x, self.taker_y,
+                self.last_reduce, self.updated_at, self.taker_margin, self.maker_margin, self.taker_auth, self.taker_x, self.taker_y,
                 self.maker_auth, self.maker_x, self.maker_y, self.rec_nonce, self.blind,
             ],
         )
@@ -263,25 +327,31 @@ impl Pair {
     pub fn plaintext(self) -> [Field; PAIR_PT_LEN] {
         [
             self.market, self.asset, self.is_short, self.size, self.entry, self.funding_index, self.close_spread,
-            self.funding_debt, self.debt_by_taker, self.last_reduce, self.taker_margin, self.maker_margin, self.taker_auth, self.taker_x, self.taker_y, self.maker_auth, self.maker_x, self.maker_y,
-            self.rec_nonce, self.blind,
+            self.funding_debt, self.debt_by_taker, self.last_reduce, self.updated_at, self.taker_margin, self.maker_margin,
+            self.taker_auth, self.taker_x, self.taker_y, self.maker_auth, self.maker_x, self.maker_y, self.rec_nonce, self.blind,
         ]
     }
 }
 
-/// Hiding, unique commitment to one change of private market state, folded later by funding_epoch. `remove` is 0 for an
-/// open and 1 for a close. `ins_in` is a penalty share entering insurance; `claim` is a shortfall asking to be covered.
+/// Open-interest change kinds. A close and a liquidation of one version share its nullifier, so they can share a kind;
+/// a reduce gets its own, because its size can equal the next version's whole size under the same nonce.
+pub global OI_OPEN: Field = 0;
+pub global OI_CLOSE: Field = 1;
+pub global OI_REDUCE: Field = 2;
+
+/// Hiding, unique commitment to one change of private market state, folded later by funding_epoch. `kind` is one of the
+/// OI_ kinds. `ins_in` is a penalty share entering insurance; `claim` is a shortfall asking to be covered.
 pub fn oi_delta(
     deployment: Field,
     market: Field,
     is_short: Field,
     size: Field,
-    remove: Field,
+    kind: Field,
     ins_in: Field,
     claim: Field,
     rec_nonce: Field,
 ) -> Field {
-    h([T_OI, deployment, market, is_short, size, remove, ins_in, claim, rec_nonce])
+    h([T_OI, deployment, market, is_short, size, kind, ins_in, claim, rec_nonce])
 }
 
 pub fn market_head(
@@ -332,24 +402,48 @@ impl Claim {
 }
 
 /// Private state of one spot pool. Each transition consumes the head on the contract and writes the next.
-/// `last_leaf` is the tree position of the last intent executed: intents only run in increasing order (D-18).
+/// `last_leaf` is the tree position of the last intent executed: intents only run in increasing order (D-18). This orders
+/// execution; it doesn't stop front-running.
+/// `proto0`/`proto1` are the protocol's share of swap fees, held in custody beside the reserves but never counted as them.
 pub struct PoolState {
     pub r0: Field,
     pub r1: Field,
     pub supply: Field,
     pub last_leaf: Field,
+    pub proto0: Field,
+    pub proto1: Field,
     pub blind: Field,
 }
 
 pub fn pool_head(deployment: Field, pool: Field, s: PoolState) -> Field {
-    h([T_POOL, deployment, RECORD_VERSION, pool, s.r0, s.r1, s.supply, s.last_leaf, s.blind])
+    h([T_POOL, deployment, RECORD_VERSION, pool, s.r0, s.r1, s.supply, s.last_leaf, s.proto0, s.proto1, s.blind])
 }
 
 pub fn pool_plaintext(s: PoolState) -> [Field; POOL_PT_LEN] {
-    [s.r0, s.r1, s.supply, s.last_leaf, s.blind]
+    [s.r0, s.r1, s.supply, s.last_leaf, s.proto0, s.proto1, s.blind]
 }
 
-/// A private LP position. `expiry` 0 means idle; otherwise it is a removal request bounded by min0 and min1.
+/// lo <= r1 * WAD / r0 <= hi, by cross-multiplication so it is exact at both edges. r0, r1 < 2^96 and lo, hi < 2^128, so
+/// both sides stay under 2^224. PRICE_NO_LOWER and PRICE_NO_UPPER skip their side, so a band can cover prices whose raw
+/// ratio falls below 1e-18 or past 2^128 / 1e18.
+pub fn assert_price_in_band(r0: Field, r1: Field, lo: Field, hi: Field) {
+    if lo != PRICE_NO_LOWER {
+        assert(!(r1 * WAD).lt(lo * r0), "price below band");
+    }
+    if hi != PRICE_NO_UPPER {
+        assert(!(hi * r0).lt(r1 * WAD), "price above band");
+    }
+}
+
+/// The protocol's part of a swap fee, rounded down. It never exceeds the fee `amount_out` already withheld, so taking it out
+/// of the input reserve leaves k non-decreasing.
+pub fn protocol_cut(amount_in: Field, fee_bps: Field, protocol_bps: Field) -> Field {
+    assert_le(protocol_bps, BPS);
+    floor_div(amount_in * fee_bps * protocol_bps, BPS * BPS)
+}
+
+/// A private LP position. `expiry` 0 means idle; otherwise it is a removal request that runs only while the pool price is
+/// within [price_lo, price_hi].
 pub struct LpClaim {
     pub pool: Field,
     pub shares: Field,
@@ -357,8 +451,8 @@ pub struct LpClaim {
     pub owner_x: Field,
     pub owner_y: Field,
     pub expiry: Field,
-    pub min0: Field,
-    pub min1: Field,
+    pub price_lo: Field,
+    pub price_hi: Field,
     pub rec_nonce: Field,
     pub blind: Field,
 }
@@ -368,14 +462,14 @@ impl LpClaim {
         h(
             [
                 T_LP, deployment, RECORD_VERSION, self.pool, self.shares, self.owner_auth, self.owner_x, self.owner_y,
-                self.expiry, self.min0, self.min1, self.rec_nonce, self.blind,
+                self.expiry, self.price_lo, self.price_hi, self.rec_nonce, self.blind,
             ],
         )
     }
 
     pub fn plaintext(self) -> [Field; LP_PT_LEN] {
         [
-            self.pool, self.shares, self.owner_auth, self.owner_x, self.owner_y, self.expiry, self.min0, self.min1,
+            self.pool, self.shares, self.owner_auth, self.owner_x, self.owner_y, self.expiry, self.price_lo, self.price_hi,
             self.rec_nonce, self.blind,
         ]
     }
@@ -539,6 +633,48 @@ pub fn below(margin: Field, gains: bool, pnl: PairPnl, requirement: Field) -> bo
     }
 }
 
+pub struct Health {
+    pub taker_bad: bool,
+    pub maker_bad: bool,
+    pub pnl: PairPnl,
+}
+
+/// The liquidation predicate, shared so that an update can never leave behind a version liquidate would accept.
+/// `s` is settle_funding(pair, funding_index, scale): unpaid funding counts against its payer.
+pub fn maintenance(pair: Pair, s: FundingSettled, mark: Field, mmr_wad: Field, scale: Field) -> Health {
+    let mm = margin_requirement(pair.size, mark, mmr_wad, scale);
+    let pnl = pair_pnl(pair.is_short, pair.size, pair.entry, mark, scale);
+    let taker_required = if s.taker_pays { mm + s.unpaid } else { mm };
+    let maker_required = if s.taker_pays { mm } else { mm + s.unpaid };
+    Health {
+        taker_bad: below(s.taker_margin, pnl.taker_gains, pnl, taker_required),
+        maker_bad: below(s.maker_margin, !pnl.taker_gains, pnl, maker_required),
+        pnl,
+    }
+}
+
+/// One side below initial margin `im`, given both margins after the change. Gains count only up to what the
+/// counterparty has posted, so a side cannot certify itself with PnL the other side cannot pay.
+pub fn side_below_im(
+    taker_side: bool,
+    taker_margin: Field,
+    maker_margin: Field,
+    taker_pays: bool,
+    unpaid: Field,
+    h: PairPnl,
+    im: Field,
+) -> bool {
+    if taker_side {
+        let certified = PairPnl { taker_gains: h.taker_gains, floor: min(h.floor, maker_margin), ceil: h.ceil };
+        let required = if taker_pays { im + unpaid } else { im };
+        below(taker_margin, h.taker_gains, certified, required)
+    } else {
+        let certified = PairPnl { taker_gains: h.taker_gains, floor: min(h.floor, taker_margin), ceil: h.ceil };
+        let required = if taker_pays { im } else { im + unpaid };
+        below(maker_margin, !h.taker_gains, certified, required)
+    }
+}
+
 #[test]
 fn division_rounds_both_ways() {
     assert_eq(floor_div(7, 2), 3);
@@ -564,4 +700,217 @@ fn zero_root_matches_contract_constant() {
         z = h([T_NODE, z, z]);
     }
     println(f"EMPTY_ROOT {z}");
+}
+
+#[test]
+fn zero_relay_fee_to_self_is_shaped_like_a_paid_one() {
+    let user = fixed_base_scalar_mul(EmbeddedCurveScalar::from_field(11));
+    let relayer = fixed_base_scalar_mul(EmbeddedCurveScalar::from_field(12));
+    let free = RelayFee { value: 0, auth: auth_key(11), pk: user, blind: 3, eph: 4 };
+    let paid = RelayFee { value: 500, auth: auth_key(12), pk: relayer, blind: 5, eph: 6 };
+    let (free_cm, free_ct) = free.note(1, 0xa0, 7, 8, 2);
+    let (paid_cm, paid_ct) = paid.note(1, 0xa0, 7, 8, 2);
+    relay_fee_note(1, 0xa0, free, 7, 8, 2, free_cm, free_ct);
+    relay_fee_note(1, 0xa0, paid, 7, 8, 2, paid_cm, paid_ct);
+    assert(free_cm != paid_cm);
+    // A zero note hides like any other: no plaintext slot comes out as its own value, and the ephemeral key is a real point.
+    for i in 2..NOTE_CT_LEN {
+        assert(free_ct[i] != 0);
+        assert(free_ct[i] != paid_ct[i]);
+    }
+    assert_on_curve(point(free_ct[0], free_ct[1]));
+    assert_on_curve(point(paid_ct[0], paid_ct[1]));
+}
+
+#[test(should_fail)]
+fn relay_fee_rejects_an_amount_past_100_bits() {
+    let relayer = fixed_base_scalar_mul(EmbeddedCurveScalar::from_field(12));
+    let _ = RelayFee { value: 0x10000000000000000000000000, auth: 1, pk: relayer, blind: 5, eph: 6 }.note(1, 0xa0, 7, 8, 2);
+}
+
+#[test]
+fn oi_reduce_and_close_never_collide() {
+    // A reduce that leaves `s` and a later close of that version, under the same nonce.
+    let s = 3 * WAD;
+    assert(oi_delta(1, 2, 0, s, OI_REDUCE, 0, 0, 99) != oi_delta(1, 2, 0, s, OI_CLOSE, 0, 0, 99));
+}
+
+global FUNDING_ZERO: Field = 0x100000000000000000000000000000000;
+
+/// The taker-bad privateLiquidation vector the audit used for finding #4 (risk_vectors.json): a long, 6-decimal asset.
+fn audit_vector_pair(taker_margin: Field) -> Pair {
+    Pair {
+        market: 1,
+        asset: 2,
+        is_short: 0,
+        size: 1674684457435445934250,
+        entry: 1415469257951605558794,
+        funding_index: FUNDING_ZERO - 1428345306688630161,
+        close_spread: 125,
+        funding_debt: 0,
+        debt_by_taker: 0,
+        last_reduce: 0,
+        updated_at: 0,
+        taker_margin,
+        maker_margin: 740564022525,
+        taker_auth: 0,
+        taker_x: 0,
+        taker_y: 0,
+        maker_auth: 0,
+        maker_x: 0,
+        maker_y: 0,
+        rec_nonce: 0,
+        blind: 0,
+    }
+}
+
+global AUDIT_MARK: Field = 1321758914295174516771;
+global AUDIT_MMR: Field = 44472916527213500;
+global AUDIT_SCALE: Field = 1_000_000_000_000;
+global AUDIT_INDEX: Field = FUNDING_ZERO + 38310824544062406996;
+
+#[test]
+fn maintenance_matches_liquidation_vector() {
+    let pair = audit_vector_pair(3295917909);
+    let s = settle_funding(pair, AUDIT_INDEX, AUDIT_SCALE);
+    assert(s.taker_pays);
+    assert_eq(s.taker_margin, 0);
+    assert_eq(s.unpaid, 63254652192);
+    let hl = maintenance(pair, s, AUDIT_MARK, AUDIT_MMR, AUDIT_SCALE);
+    assert(hl.taker_bad);
+    assert(!hl.maker_bad);
+    assert(!hl.pnl.taker_gains);
+}
+
+#[test]
+fn maintenance_healthy_after_cure() {
+    // accrued funding 66550570101 + maintenance 98442095351 + loss 156935256023: the smallest healthy taker margin.
+    let enough = 321927921475;
+    let cured = audit_vector_pair(enough);
+    let hl = maintenance(cured, settle_funding(cured, AUDIT_INDEX, AUDIT_SCALE), AUDIT_MARK, AUDIT_MMR, AUDIT_SCALE);
+    assert(!hl.taker_bad);
+    assert(!hl.maker_bad);
+    let short = audit_vector_pair(enough - 1);
+    let hl = maintenance(short, settle_funding(short, AUDIT_INDEX, AUDIT_SCALE), AUDIT_MARK, AUDIT_MMR, AUDIT_SCALE);
+    assert(hl.taker_bad);
+}
+
+#[test]
+fn side_below_im_matches_removal_check() {
+    let scale = 1_000_000_000_000;
+    let size = 4 * WAD;
+    // Flat: 4 units at 250, 10% IMR, so IM is exactly 100 USDG.
+    let im = margin_requirement(size, 250 * WAD, WAD / 10, scale);
+    assert_eq(im, 100_000_000);
+    let flat = pair_pnl(0, size, 250 * WAD, 250 * WAD, scale);
+    let big = 1_000_000_000_000;
+    assert(!side_below_im(true, im, big, false, 0, flat, im));
+    assert(!side_below_im(true, im + 1, big, false, 0, flat, im));
+    assert(side_below_im(true, im - 1, big, false, 0, flat, im));
+    // The payer of unpaid funding needs IM plus that debt; the other side does not.
+    assert(side_below_im(false, big, im + 6, false, 7, flat, im));
+    assert(!side_below_im(false, big, im + 7, false, 7, flat, im));
+    assert(!side_below_im(true, im, big, false, 7, flat, im));
+
+    // Taker up 40 USDG at 260, IM 104 USDG, but the maker posted only 10: the gain counts as 10.
+    let im = margin_requirement(size, 260 * WAD, WAD / 10, scale);
+    assert_eq(im, 104_000_000);
+    let up = pair_pnl(0, size, 250 * WAD, 260 * WAD, scale);
+    assert(!side_below_im(true, 94_000_000, 10_000_000, false, 0, up, im));
+    assert(side_below_im(true, 93_999_999, 10_000_000, false, 0, up, im));
+    // The losing maker needs IM plus its 40 USDG loss.
+    assert(!side_below_im(false, big, 144_000_000, false, 0, up, im));
+    assert(side_below_im(false, big, 143_999_999, false, 0, up, im));
+}
+
+// Pool at P = 4: 1e6 token0 against 4e6 token1.
+global BAND_R0: Field = 1_000_000;
+global BAND_R1: Field = 4_000_000;
+
+#[test]
+fn price_band_accepts_both_edges() {
+    assert_price_in_band(BAND_R0, BAND_R1, 4 * WAD, 4 * WAD);
+    assert_price_in_band(BAND_R0, BAND_R1, 3 * WAD, 4 * WAD);
+    assert_price_in_band(BAND_R0, BAND_R1, 4 * WAD, 5 * WAD);
+}
+
+#[test(should_fail_with = "price below band")]
+fn price_band_rejects_one_below() {
+    assert_price_in_band(BAND_R0, BAND_R1, 4 * WAD + 1, 5 * WAD);
+}
+
+#[test(should_fail_with = "price above band")]
+fn price_band_rejects_one_above() {
+    assert_price_in_band(BAND_R0, BAND_R1, 3 * WAD, 4 * WAD - 1);
+}
+
+#[test]
+fn price_band_handles_6_vs_18_decimals() {
+    // 1e6 of a 6-decimal token0 against 1e10 of an 18-decimal token1 worth 1e-4 of it: P = 1e34, past 2^96.
+    let (r0, r1) = (1_000_000_000_000, 10_000_000_000_000_000_000_000_000_000);
+    let p = 10_000_000_000_000_000_000_000_000_000_000_000;
+    r1.assert_max_bit_size::<RESERVE_BITS>();
+    assert(!p.lt(0x1000000000000000000000000));
+    p.assert_max_bit_size::<PRICE_BAND_BITS>();
+    assert_price_in_band(r0, r1, p, p);
+    assert_price_in_band(r0, r1, p - 1, p + 1);
+}
+
+#[test]
+fn protocol_cut_is_zero_at_zero_share() {
+    assert_eq(protocol_cut(0xffffffffffffffffffffffff, 9_999, 0), 0);
+}
+
+#[test]
+fn protocol_cut_rounds_down() {
+    // 10,000 in at 30 bps with a 2,500 bps share: 7.5 rounds to 7.
+    assert_eq(protocol_cut(10_000, 30, 2_500), 7);
+    assert_eq(protocol_cut(10_000, 30, BPS), 30);
+    assert_eq(protocol_cut(333, 30, 2_500), 0);
+}
+
+#[test(should_fail)]
+fn protocol_cut_rejects_share_above_bps() {
+    let _ = protocol_cut(10_000, 30, BPS + 1);
+}
+
+#[test]
+fn k_never_drops_with_max_share() {
+    let fee_bps = 30;
+    let mut r_in = BAND_R0;
+    let mut r_out = BAND_R1;
+    for amount_in in [1, 333, 10_000, 999_999, 7_000_000] {
+        let out = amount_out(amount_in, r_in, r_out, fee_bps);
+        let cut = protocol_cut(amount_in, fee_bps, BPS);
+        let (next_in, next_out) = (r_in + amount_in - cut, r_out - out);
+        assert_le(r_in * r_out, next_in * next_out);
+        r_in = next_out;
+        r_out = next_in;
+    }
+}
+
+#[test]
+fn open_ended_band_covers_a_sub_wad_price() {
+    // 1e28 of an 18-decimal token0 against 1e3 units of a 6-decimal token1: P = 1e-7 in raw WAD, below any nonzero lo.
+    assert_price_in_band(10_000_000_000_000_000_000_000_000_000, 1_000, PRICE_NO_LOWER, PRICE_NO_UPPER);
+    assert_price_in_band(10_000_000_000_000_000_000_000_000_000, 1_000, PRICE_NO_LOWER, 1);
+}
+
+#[test(should_fail_with = "price below band")]
+fn smallest_nonzero_lower_bound_still_excludes_a_sub_wad_price() {
+    assert_price_in_band(10_000_000_000_000_000_000_000_000_000, 1_000, 1, PRICE_NO_UPPER);
+}
+
+#[test]
+fn open_ended_band_covers_a_price_past_128_bits() {
+    // 1 unit of token0 against 2^96 - 1 of token1: P = (2^96 - 1) * 1e18, past 2^128.
+    let r1 = 0xffffffffffffffffffffffff;
+    assert(PRICE_NO_UPPER.lt(r1 * WAD));
+    assert_price_in_band(1, r1, PRICE_NO_LOWER, PRICE_NO_UPPER);
+    assert_price_in_band(1, r1, WAD, PRICE_NO_UPPER);
+}
+
+#[test(should_fail_with = "price above band")]
+fn widest_closed_upper_bound_still_excludes_a_price_past_128_bits() {
+    assert_price_in_band(1, 0xffffffffffffffffffffffff, PRICE_NO_LOWER, PRICE_NO_UPPER - 1);
 }

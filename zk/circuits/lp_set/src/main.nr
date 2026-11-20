@@ -1,14 +1,17 @@
-// Rewrites an LP claim. Mode 0: the owner requests removal, committing minimum amounts and an expiry. Mode 1: anyone returns an
-// expired request to an idle claim, so a request the operator ignores costs the owner nothing.
-use rooq_zk::{auth_key, encrypt, LP_CT_LEN, LpClaim, merkle_root, point, rec_nonce, rec_nullifier, TREE_DEPTH};
+// Rewrites an LP claim. Mode 0: the owner requests removal, committing a price band and an expiry. Mode 1: anyone returns an
+// expired request to an idle claim, so a request the operator ignores costs the owner nothing. A band bound of
+// PRICE_NO_LOWER (0) or PRICE_NO_UPPER (2^128 - 1) leaves that side open, so any pool price can be expressed.
+use rooq_zk::{auth_key, encrypt, LP_CT_LEN, LpClaim, merkle_root, point, PRICE_BAND_BITS, rec_nonce, rec_nullifier, TREE_DEPTH};
+
+mod tests;
 
 fn main(
     claim: LpClaim,
     index: Field,
     path: [Field; TREE_DEPTH],
     sk: Field,
-    min0: Field,
-    min1: Field,
+    price_lo: Field,
+    price_hi: Field,
     expiry: Field,
     salt: Field,
     new_blind: Field,
@@ -28,11 +31,15 @@ fn main(
     assert(mode * (mode - 1) == 0, "unknown mode");
     now.assert_max_bit_size::<64>();
     expiry.assert_max_bit_size::<64>();
-    let (next_expiry, next_min0, next_min1) = if mode == 0 {
+    let (next_expiry, next_lo, next_hi) = if mode == 0 {
         assert_eq(auth_key(sk), claim.owner_auth, "not the owner");
         assert_eq(claim.expiry, 0, "request already open");
         assert(expiry != 0, "request needs an expiry");
-        (expiry, min0, min1)
+        price_lo.assert_max_bit_size::<PRICE_BAND_BITS>();
+        price_hi.assert_max_bit_size::<PRICE_BAND_BITS>();
+        assert(price_hi != 0, "empty band");
+        assert(!price_hi.lt(price_lo), "inverted band");
+        (expiry, price_lo, price_hi)
     } else {
         assert(claim.expiry != 0, "no open request");
         assert(claim.expiry.lt(now), "request not expired");
@@ -45,8 +52,8 @@ fn main(
         owner_x: claim.owner_x,
         owner_y: claim.owner_y,
         expiry: next_expiry,
-        min0: next_min0,
-        min1: next_min1,
+        price_lo: next_lo,
+        price_hi: next_hi,
         rec_nonce: rec_nonce(nf, 0, 0, salt),
         blind: new_blind,
     };

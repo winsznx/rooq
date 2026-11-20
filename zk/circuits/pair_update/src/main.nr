@@ -10,12 +10,28 @@
 // same shape, including an open-interest change of size 0 when nothing was reduced, so actions look alike on chain.
 // When the pair has a pending exit request, `carried_nf` names the next version so the request and its deadline move with it
 // (REC-03). It is 0 otherwise, so ordinary updates stay unlinked.
+//
+// Every exit consumes the version this replaces, so two rules keep updates from racing them. With a fresh mark, the next
+// version must pass the same maintenance test liquidate applies, so an update cannot keep a liquidatable pair alive. And
+// each version records `as_of`, after which the lineage cannot be updated again for `min_gap` seconds; the contract bounds
+// `as_of` to the block time. The one exception is a cure: inside the cooldown, an owner whose own side is below initial
+// margin may still add margin, as long as the addition brings that side back to initial margin. A cure keeps the
+// replaced version's `updated_at`, so it never restarts the clock and a run of cures still ends when the first cooldown
+// does. For TAKER_GRACE seconds after each cooldown only the taker may update, so maker and keyless updates cannot keep
+// replacing the version a taker's reduce or removal was proved against. The public shape is the same in every case, and
+// nothing published says which actor updated.
+//
+// The relay fee note (rho index 3) comes out of the actor's out note, after every margin check, so it never counts toward
+// a cure. Actor 0 has no owner key and pays zero, as on every keyless path, so a keyless update never moves value.
 use rooq_zk::{
-    assert_amount, auth_key, below, BPS, ceil_div, encrypt, fee, floor_div, FREE_DOMAIN, margin_requirement, merkle_root, min,
-    note_commitment, note_inner, NOTE_CT_LEN, nullifier_key, oi_delta, output_rho, owner_nullifier, owner_tag, Pair,
-    PAIR_CT_LEN, pair_pnl, PairPnl, point, PRICE_BITS, rec_nonce, rec_nullifier, settle_funding, SIZE_BITS, TREE_DEPTH,
+    assert_amount, auth_key, BPS, ceil_div, encrypt, fee, floor_div, FREE_DOMAIN, maintenance, margin_requirement, merkle_root,
+    min, note_commitment, note_inner, NOTE_CT_LEN, nullifier_key, OI_REDUCE, oi_delta, output_rho, owner_nullifier, owner_tag,
+    Pair, PAIR_CT_LEN, pair_pnl, point, PRICE_BITS, rec_nonce, rec_nullifier, settle_funding, side_below_im, SIZE_BITS,
+    relay_fee_note, RelayFee, TAKER_GRACE, TIME_BITS, TREE_DEPTH,
 };
 use std::embedded_curve_ops::EmbeddedCurvePoint;
+
+mod tests;
 
 struct NoteIn {
     value: Field,
@@ -44,6 +60,7 @@ fn main(
     out_eph: Field,
     fee_blind: Field,
     fee_eph: Field,
+    relay: RelayFee,
     root: pub Field,
     nf: pub [Field; 2],
     cm_pair: pub Field,
@@ -65,6 +82,11 @@ fn main(
     fee_auth: pub Field,
     fee_pk: pub [Field; 2],
     carried_nf: pub Field,
+    mmr_wad: pub Field,
+    as_of: pub Field,
+    min_gap: pub Field,
+    cm_relay: pub Field,
+    ct_relay: pub [Field; NOTE_CT_LEN],
 ) {
     let cm = pair.commit(deployment);
     assert_eq(merkle_root(cm, index, path), root, "pair not in tree");
@@ -137,18 +159,26 @@ fn main(
     }
 
     let size = pair.size - reduce;
+    // A cure requires reduce == 0, so for it these are also the pre-update size's figures.
+    let im = margin_requirement(size, mark, imr_wad, scale);
+    let at_mark = pair_pnl(pair.is_short, size, pair.entry, mark, scale);
+    let own_side = actor == 1;
     if remove != 0 {
-        let im = margin_requirement(size, mark, imr_wad, scale);
-        let health = pair_pnl(pair.is_short, size, pair.entry, mark, scale);
-        if actor == 1 {
-            let certified = PairPnl { taker_gains: health.taker_gains, floor: min(health.floor, maker_margin), ceil: health.ceil };
-            let required = if taker_pays { im + unpaid } else { im };
-            assert(!below(taker_margin, health.taker_gains, certified, required), "below initial margin");
-        } else {
-            let certified = PairPnl { taker_gains: health.taker_gains, floor: min(health.floor, taker_margin), ceil: health.ceil };
-            let required = if taker_pays { im } else { im + unpaid };
-            assert(!below(maker_margin, !health.taker_gains, certified, required), "below initial margin");
-        }
+        assert(!side_below_im(own_side, taker_margin, maker_margin, taker_pays, unpaid, at_mark, im), "below initial margin");
+    }
+
+    as_of.assert_max_bit_size::<TIME_BITS>();
+    min_gap.assert_max_bit_size::<32>();
+    // Only inside the cooldown does the cure have to reach initial margin; after it, a partial top-up is an ordinary add.
+    let cooldown_end = pair.updated_at + min_gap;
+    let in_cooldown = as_of.lt(cooldown_end);
+    if in_cooldown {
+        let pre_bad = side_below_im(own_side, settled.taker_margin, settled.maker_margin, taker_pays, settled.unpaid, at_mark, im);
+        let cure = (actor != 0) & (add != 0) & (remove == 0) & (reduce == 0) & (mark != 0) & pre_bad;
+        assert(cure, "update cooldown");
+        assert(!side_below_im(own_side, taker_margin, maker_margin, taker_pays, unpaid, at_mark, im), "cure must reach initial margin");
+    } else if as_of.lt(cooldown_end + TAKER_GRACE) {
+        assert_eq(actor, 1, "taker grace");
     }
 
     let next = Pair {
@@ -162,6 +192,7 @@ fn main(
         funding_debt: unpaid,
         debt_by_taker: if (unpaid != 0) & taker_pays { 1 } else { 0 },
         last_reduce: reduce,
+        updated_at: if in_cooldown { pair.updated_at } else { as_of },
         taker_margin,
         maker_margin,
         taker_auth: pair.taker_auth,
@@ -173,11 +204,16 @@ fn main(
         rec_nonce: rec_nonce(nf[0], nf[1], 0, salt),
         blind: new_blind,
     };
+    // Mark 0 skips this, which is safe: liquidate needs a fresh price.
+    if mark != 0 {
+        let hl = maintenance(next, settle_funding(next, funding_index, scale), mark, mmr_wad, scale);
+        assert(!hl.taker_bad & !hl.maker_bad, "update leaves pair liquidatable");
+    }
     assert_eq(next.commit(deployment), cm_pair);
     if carried_nf != 0 {
         assert_eq(carried_nf, rec_nullifier(cm_pair, next.rec_nonce), "wrong carried nullifier");
     }
-    assert_eq(oi_delta(deployment, market, pair.is_short, reduce, 1, 0, 0, next.rec_nonce), delta_cm);
+    assert_eq(oi_delta(deployment, market, pair.is_short, reduce, OI_REDUCE, 0, 0, next.rec_nonce), delta_cm);
     let plain = next.plaintext();
     let keys = [
         point(pair.taker_x, pair.taker_y), point(pair.maker_x, pair.maker_y), point(risk_pk[0][0], risk_pk[0][1]),
@@ -187,10 +223,15 @@ fn main(
         assert_eq(encrypt(plain, keys[i], pair_eph[i]), ct_pair[i]);
     }
 
-    let out_value = note.value - add + remove;
+    if relay.value != 0 {
+        assert(actor != 0, "fee needs the owner key");
+    }
+    relay_fee_note(deployment, asset, relay, nf[0], nf[1], 3, cm_relay, ct_relay);
+    assert(!(note.value - add + remove).lt(relay.value), "fee above available");
+    let out_value = note.value - add + remove - relay.value;
     assert_eq(
         pair.taker_margin + pair.maker_margin + note.value,
-        taker_margin + maker_margin + out_value + taker_fee,
+        taker_margin + maker_margin + out_value + taker_fee + relay.value,
         "value not conserved",
     );
     let (out_auth, out_key) = if actor == 2 { (pair.maker_auth, keys[1]) } else { (pair.taker_auth, keys[0]) };
