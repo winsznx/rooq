@@ -9,6 +9,7 @@
     "start": "next start --port 3200",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "test": "vitest run",
     "proving-assets": "node scripts/sync-proving-assets.mjs",
     "predev": "node scripts/sync-proving-assets.mjs",
     "prebuild": "node scripts/sync-proving-assets.mjs"
@@ -37,6 +38,7 @@
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.5",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
   }
 }

@@ -1,6 +1,9 @@
 import type { MerkleTree, Point, ShieldedDeposit } from "@rooq/private-sdk";
 import { createPublicClient, erc20Abi, http, keccak256, parseAbi, parseAbiItem, toBytes, type Address, type Hex, type PublicClient } from "viem";
-import { PRIVATE_READ_URL, PRIVATE_RELAYER_URL, PRIVATE_RPC_URL } from "./config";
+import { PRIVATE_CHAIN_ID, PRIVATE_DEPLOYMENT_PIN, PRIVATE_READ_URL, PRIVATE_RECORD_VERSION, PRIVATE_RELAYER_URL, PRIVATE_RPC_URL } from "./config";
+import { DEPLOYMENT_MISMATCH, deploymentMismatch } from "./deployment-pin";
+import { FoldedRatios, type FoldedReader } from "./folded-ratios";
+import { checkRows, highestPending, rootOnChain } from "./anchor";
 import { MARKETS_ABI } from "./chain-state-abi";
 import { FIXTURE_DISPLAY, keyForMarket } from "./markets";
 import type { CreateInfo, MarketView, PoolView, PricePoint, TokenInfo } from "./types";
@@ -13,9 +16,17 @@ export const POOL_EVENTS = parseAbi([
   "event PairLiquidated(uint256 indexed market, bytes32 nullifier, uint256 mark)",
   "event Unshielded(address indexed asset, address indexed recipient, uint256 amount, address relayer, uint256 fee)",
 ]);
-const FOLDED_ABI = parseAbi(["function foldedRatioPlusOne(bytes32) view returns (uint256)"]);
+/** v2 deployments only: the market struct gained `maxCloseSpreadBps`, and shield refuses a reused deposit opening. */
+const POOL_READS_V2 = parseAbi([
+  "struct Market { address asset; bytes32 feedId; uint256 scale; uint256 imrWad; uint256 mmrWad; uint256 penaltyBps; uint256 maxFundingPerHourWad; uint256 takerFeeBps; uint256 maxOiUsdWad; uint256 maxPairSize; uint256 maxCloseSpreadBps; }",
+  "function market(uint256 id) view returns (Market)",
+  "function usedInner(bytes32 inner) view returns (bool)",
+]);
+const FOLDED_ABI = parseAbi(["function foldedRatioPlusOne(bytes32) view returns (uint256)", "function oiDelta(uint256 id, uint256 i) view returns (bytes32)"]);
 const POOL_READS = parseAbi([
   "function marketsModule() view returns (address)",
+  "function rootSeqOf(bytes32 root) view returns (uint256)",
+  "function queueLength() view returns (uint256)",
   "function oracle() view returns (address)",
   "function coordinatorX() view returns (uint256)",
   "function coordinatorY() view returns (uint256)",
@@ -32,6 +43,11 @@ const ORACLE_READS = parseAbi([
   "function isApproved(bytes32 feedId) view returns (bool)",
   "function getPrice(bytes32 feedId) view returns (uint256 priceWad, uint256 updatedAt, bool fresh)",
   "function feedConfig(bytes32 feedId) view returns (address aggregator)",
+]);
+/** The leading fields of PrivateSpot's `Pool`, the same in v1 and v2. */
+const SPOT_READS = parseAbi([
+  "struct PoolHead { address token0; address token1; uint256 feeBps; }",
+  "function pool(uint256 id) view returns (PoolHead)",
 ]);
 const FEED_ABI = parseAbi(["function decimals() view returns (uint8)"]);
 const ANSWER_EVENT = parseAbiItem("event AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt)");
@@ -84,6 +100,23 @@ export interface Unshield extends Spent {
   readonly amount: bigint;
 }
 
+/** A market's oracle price as the contract reads it. `price` and `updatedAt` are 0 when the oracle has no valid answer. */
+export interface MarketFeed {
+  readonly collateral: Address;
+  readonly price: bigint;
+  readonly updatedAt: bigint;
+  readonly fresh: boolean;
+}
+
+/** What the LP price check needs, all read from the chain. */
+export interface PoolOracle {
+  readonly token0: Address;
+  readonly token1: Address;
+  readonly feeBps: bigint;
+  /** Null when no market prices this pool's token. */
+  readonly feed: MarketFeed | null;
+}
+
 export class ServiceDown extends Error {
   constructor(readonly service: "read" | "relayer" | "rpc", readonly detail: string) {
     super(`${service}: ${detail}`);
@@ -96,6 +129,8 @@ const MIN_LOG_SPAN = 2_000n;
 /** The chart needs about a day of oracle updates, not every update since deployment. */
 const PRICE_LOOKBACK_BLOCKS = 600_000n;
 const RPC_SOURCE = "rpc";
+/** The read API served a root, record, deposit or queue entry the chain doesn't have. */
+export const CHAIN_MISMATCH = "CHAIN_MISMATCH";
 
 /**
  * Reads logs from `from` to `head` in large ranges, halving a range the RPC refuses. Returns the next block to read.
@@ -203,12 +238,22 @@ export class ChainState {
   private logsFrom: bigint | null = null;
   private reorgsSeen: number | null = null;
   private readonly client: PublicClient = createPublicClient({ transport: http(PRIVATE_RPC_URL, { timeout: 8_000, retryCount: 1 }) });
+  /** Same RPC, with calls sent as JSON-RPC batches, for reads that cover every market or every delta. */
+  private readonly batchClient: PublicClient = createPublicClient({ transport: http(PRIVATE_RPC_URL, { timeout: 15_000, retryCount: 1, batch: { batchSize: 64 } }) });
+  private readonly folded = new FoldedRatios();
+  /** Market config is fixed at creation, so each cap is read once. */
+  private readonly closeSpreadCaps = new Map<bigint, bigint>();
   private blockTimes = new Map<bigint, bigint>();
   relayerDown = false;
   private priceLogs = new Map<bigint, { from: bigint; points: PricePoint[] }>();
   private pricesSince = 0;
   private publicLoaded = false;
   private createLoadedAt = 0;
+  /** What anchor() has already tied to the chain. */
+  private anchoredRoot: Hex | null = null;
+  private recordsChecked = 0;
+  private depositsChecked = 0;
+  private queueSeen = 0;
 
   /** One read-API request for the public data a page needs. False when the API can't answer, so the caller reads the chain. */
   private async loadPublic(): Promise<boolean> {
@@ -263,6 +308,51 @@ export class ChainState {
     this.ends.clear();
     this.unshields = [];
     this.funding.clear();
+    this.folded.clear();
+    this.anchoredRoot = null;
+    this.recordsChecked = 0;
+    this.depositsChecked = 0;
+    this.queueSeen = 0;
+  }
+
+  /**
+   * The tree, records and deposits come from the read API, which also served the root they were checked against. This
+   * checks the root with the pool contract, every record and deposit against the tree's leaf at its index, and that
+   * entries not in the tree yet exist in the on-chain queue. The spent, exit and end maps aren't checked here.
+   */
+  private async anchor(): Promise<void> {
+    const pool = this.deployment!.pool;
+    const root = this.root!;
+    const client = this.client;
+    try {
+      if (root !== this.anchoredRoot) {
+        const known = await rootOnChain(() => client.readContract({ address: pool, abi: POOL_READS, functionName: "rootSeqOf", args: [root] }));
+        if (!known) throw new ServiceDown("read", CHAIN_MISMATCH);
+        this.anchoredRoot = root;
+      }
+      const pending = Math.max(highestPending(this.records, this.tree.size), highestPending(this.deposits, this.tree.size));
+      if (pending >= this.queueSeen) {
+        this.queueSeen = Number(await client.readContract({ address: pool, abi: POOL_READS, functionName: "queueLength" }));
+        if (pending >= this.queueSeen) throw new ServiceDown("read", CHAIN_MISMATCH);
+      }
+    } catch (error) {
+      if (error instanceof ServiceDown) {
+        this.reset();
+        throw error;
+      }
+      throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "root check unavailable");
+    }
+    const noteCommitment = PRIVATE_RECORD_VERSION === 1 ? (await import("@rooq/private-sdk/legacy/v1")).noteCommitmentV1 : (await import("@rooq/private-sdk")).noteCommitment;
+    const id = this.deployment!.id;
+    const records = checkRows(this.records, this.recordsChecked, this.tree, (r) => r.commitment);
+    const deposits = checkRows(this.deposits, this.depositsChecked, this.tree, (d) => noteCommitment(id, d.asset, d.amount, d.inner));
+    if (records.bad || deposits.bad) {
+      this.reset();
+      throw new ServiceDown("read", CHAIN_MISMATCH);
+    }
+    this.recordsChecked = records.next;
+    this.depositsChecked = deposits.next;
+    this.processed = this.tree.size;
   }
 
   private async loadDeployment(): Promise<void> {
@@ -271,6 +361,11 @@ export class ChainState {
       feeTo: { auth: string; pk: { x: string; y: string } };
       spotTokens: Address[];
     }>("/v1/deployment");
+    const wrong = deploymentMismatch(d, PRIVATE_DEPLOYMENT_PIN, PRIVATE_CHAIN_ID);
+    if (wrong !== null) {
+      console.error(`rooq: read API named a different ${wrong} than this build trusts`, d);
+      throw new ServiceDown("read", DEPLOYMENT_MISMATCH);
+    }
     if (this.deployment && this.deployment.id !== BigInt(d.deploymentId)) this.reset();
     const point = (p: { x: string; y: string }): Point => ({ x: BigInt(p.x), y: BigInt(p.y) });
     this.deployment = {
@@ -290,14 +385,80 @@ export class ChainState {
     return { coordinator: { x: cx, y: cy }, riskKeys: [{ x: ax, y: ay }, { x: bx, y: by }] };
   }
 
+  /**
+   * A market's collateral and oracle price, with the feed id read from the market itself: the read API names neither,
+   * so a wrong feed there can't change what a price check compares against. Null for a market that doesn't exist.
+   */
+  private async marketFeed(market: bigint): Promise<MarketFeed | null> {
+    const { client, deployment } = this;
+    if (!deployment) throw new ServiceDown(RPC_SOURCE, "deployment not loaded");
+    const m = await client.readContract({ address: deployment.pool, abi: POOL_READS, functionName: "market", args: [market] });
+    if (BigInt(m.feedId) === 0n) return null;
+    const oracle = await client.readContract({ address: deployment.pool, abi: POOL_READS, functionName: "oracle" });
+    const [price, updatedAt, fresh] = await client.readContract({ address: oracle, abi: ORACLE_READS, functionName: "getPrice", args: [m.feedId] });
+    return { collateral: m.asset, price, updatedAt, fresh };
+  }
+
   /** The price the contract would use right now, for checking an order at the moment it's placed. Null when the feed is stale. */
   async readMark(market: bigint): Promise<bigint | null> {
-    const { client, deployment } = this;
-    const feedId = this.markets.find((m) => m.id === market)?.feedId;
-    if (!deployment || !feedId) return null;
-    const oracle = await client.readContract({ address: deployment.pool, abi: POOL_READS, functionName: "oracle" });
-    const [price, , fresh] = await client.readContract({ address: oracle, abi: ORACLE_READS, functionName: "getPrice", args: [feedId] });
-    return fresh ? price : null;
+    const feed = await this.marketFeed(market);
+    return feed?.fresh ? feed.price : null;
+  }
+
+  /**
+   * The pool's tokens and fee and, when `market` prices its token, that market's oracle price. The LP range is built from
+   * the fee and checked against the price, so both come from the chain rather than the read API.
+   */
+  async readPoolOracle(pool: bigint, market: bigint | null): Promise<PoolOracle> {
+    const spot = this.deployment?.spot;
+    if (!spot) throw new ServiceDown(RPC_SOURCE, "no private spot deployment");
+    try {
+      const [p, feed] = await Promise.all([
+        this.client.readContract({ address: spot, abi: SPOT_READS, functionName: "pool", args: [pool] }),
+        market === null ? null : this.marketFeed(market),
+      ]);
+      return { token0: p.token0, token1: p.token1, feeBps: p.feeBps, feed };
+    } catch (error) {
+      throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "pool price check unavailable");
+    }
+  }
+
+  /**
+   * The latest block's time, read just before proving. Locks and pair updates stamp it as `asOf`, which the contract
+   * bounds to the last two minutes, so the read API's indexed head can be too old for it.
+   */
+  async latestBlockTime(): Promise<bigint> {
+    try {
+      const block = await this.client.getBlock({ blockTag: "latest" });
+      return block.timestamp;
+    } catch (error) {
+      throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "block time unavailable");
+    }
+  }
+
+  /** Whether the pool already took a deposit with this opening. A v1 pool doesn't track it. */
+  async innerUsed(inner: Hex): Promise<boolean> {
+    if (PRIVATE_RECORD_VERSION === 1) return false;
+    try {
+      return await this.client.readContract({ address: this.deployment!.pool, abi: POOL_READS_V2, functionName: "usedInner", args: [inner] });
+    } catch (error) {
+      throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "deposit check unavailable");
+    }
+  }
+
+  /** The read API's `maxCloseSpreadBps` when it serves one, else the market's own config. A v1 market has no cap. */
+  private async closeSpreadCap(id: bigint, served: string | undefined): Promise<bigint | null> {
+    if (served !== undefined) return BigInt(served);
+    if (PRIVATE_RECORD_VERSION === 1) return null;
+    const known = this.closeSpreadCaps.get(id);
+    if (known !== undefined) return known;
+    try {
+      const m = await this.batchClient.readContract({ address: this.deployment!.pool, abi: POOL_READS_V2, functionName: "market", args: [id] });
+      this.closeSpreadCaps.set(id, m.maxCloseSpreadBps);
+      return m.maxCloseSpreadBps;
+    } catch (error) {
+      throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "market config unavailable");
+    }
   }
 
   private async loadTokens(addresses: readonly Address[]): Promise<void> {
@@ -315,15 +476,16 @@ export class ChainState {
 
   private async loadMarkets(): Promise<void> {
     interface MarketRow {
-      market: string; asset: Address; feedId: Hex; scale: string; imrWad: string; mmrWad: string; penaltyBps: string; maxFundingPerHourWad: string; takerFeeBps: string; maxOiUsdWad: string; maxPairSize: string;
+      market: string; asset: Address; feedId: Hex; scale: string; imrWad: string; mmrWad: string; penaltyBps: string; maxFundingPerHourWad: string; takerFeeBps: string; maxOiUsdWad: string; maxPairSize: string; maxCloseSpreadBps?: string;
       funding: { index: string; lastEpoch: string; epochs: number }; mark: string; markFresh: boolean; markUpdatedAt: string;
     }
     const { markets } = await readJson<{ markets: MarketRow[] }>("/v1/markets");
     const now = this.chainNow;
-    this.markets = markets.map((m) => ({
+    const caps = await Promise.all(markets.map((m) => this.closeSpreadCap(BigInt(m.market), m.maxCloseSpreadBps)));
+    this.markets = markets.map((m, i) => ({
       id: BigInt(m.market), label: keyForMarket(BigInt(m.market)) ?? `Market ${m.market}`, collateral: m.asset, feedId: m.feedId, fundingPerSecondWad: null, history: [], mark: m.markFresh ? BigInt(m.mark) : null, markFresh: m.markFresh,
       markAgeSeconds: now !== null ? Math.max(0, Number(now - BigInt(m.markUpdatedAt))) : null, imrWad: BigInt(m.imrWad), mmrWad: BigInt(m.mmrWad), penaltyBps: BigInt(m.penaltyBps), scale: BigInt(m.scale), takerFeeBps: BigInt(m.takerFeeBps),
-      maxPairSize: BigInt(m.maxPairSize), maxOiUsdWad: BigInt(m.maxOiUsdWad), maxFundingPerHourWad: BigInt(m.maxFundingPerHourWad), fundingIndex: BigInt(m.funding.index), fundingLastEpoch: BigInt(m.funding.lastEpoch), fundingEpochs: m.funding.epochs,
+      maxPairSize: BigInt(m.maxPairSize), maxCloseSpreadBps: caps[i] ?? null, maxOiUsdWad: BigInt(m.maxOiUsdWad), maxFundingPerHourWad: BigInt(m.maxFundingPerHourWad), fundingIndex: BigInt(m.funding.index), fundingLastEpoch: BigInt(m.funding.lastEpoch), fundingEpochs: m.funding.epochs,
     }));
     for (const m of markets) {
       const id = BigInt(m.market);
@@ -381,10 +543,13 @@ export class ChainState {
       const oracle = await client.readContract({ address: d.pool, abi: POOL_READS, functionName: "oracle" });
       for (const c of this.createdMarkets) {
         if (this.markets.some((m) => m.id === c.id)) continue;
-        const [m, f, price] = await Promise.all([client.readContract({ address: d.pool, abi: POOL_READS, functionName: "market", args: [c.id] }), client.readContract({ address: d.pool, abi: POOL_READS, functionName: "funding", args: [c.id] }), client.readContract({ address: oracle, abi: ORACLE_READS, functionName: "getPrice", args: [c.feedId] })]);
+        const [m, f, price, cap] = await Promise.all([
+          client.readContract({ address: d.pool, abi: POOL_READS, functionName: "market", args: [c.id] }), client.readContract({ address: d.pool, abi: POOL_READS, functionName: "funding", args: [c.id] }),
+          client.readContract({ address: oracle, abi: ORACLE_READS, functionName: "getPrice", args: [c.feedId] }), this.closeSpreadCap(c.id, undefined),
+        ]);
         this.markets.push({
           id: c.id, label: keyForMarket(c.id) ?? `Market ${c.id}`, collateral: m.asset, feedId: c.feedId, fundingPerSecondWad: null, history: [], mark: price[2] ? price[0] : null, markFresh: price[2], markAgeSeconds: this.chainNow !== null ? Math.max(0, Number(this.chainNow - price[1])) : null,
-          imrWad: m.imrWad, mmrWad: m.mmrWad, penaltyBps: m.penaltyBps, scale: m.scale, takerFeeBps: m.takerFeeBps, maxPairSize: m.maxPairSize, maxOiUsdWad: m.maxOiUsdWad, maxFundingPerHourWad: m.maxFundingPerHourWad, fundingIndex: f.index, fundingLastEpoch: f.lastEpoch, fundingEpochs: 0,
+          imrWad: m.imrWad, mmrWad: m.mmrWad, penaltyBps: m.penaltyBps, scale: m.scale, takerFeeBps: m.takerFeeBps, maxPairSize: m.maxPairSize, maxCloseSpreadBps: cap, maxOiUsdWad: m.maxOiUsdWad, maxFundingPerHourWad: m.maxFundingPerHourWad, fundingIndex: f.index, fundingLastEpoch: f.lastEpoch, fundingEpochs: 0,
         });
       }
     } catch (error) {
@@ -523,6 +688,7 @@ export class ChainState {
       this.reset();
       throw new ServiceDown("read", "ROOT_MISMATCH");
     }
+    await this.anchor();
     try {
       await this.syncLogs();
     } catch (error) {
@@ -544,9 +710,28 @@ export class ChainState {
     }
   }
 
-  async foldedRatio(delta: Hex): Promise<bigint | null> {
-    const r = await this.client.readContract({ address: this.deployment!.pool, abi: FOLDED_ABI, functionName: "foldedRatioPlusOne", args: [delta] });
-    return r === 0n ? null : r - 1n;
+  /**
+   * Reads the claim ratio of every folded open-interest change in every market, so the RPC never sees which claim
+   * this wallet holds. Incremental: a market is read again only after its funding advances.
+   */
+  async syncFoldedRatios(): Promise<void> {
+    const pool = this.deployment!.pool;
+    const client = this.batchClient;
+    const reader: FoldedReader = {
+      consumed: async (market) => (await client.readContract({ address: pool, abi: POOL_READS, functionName: "funding", args: [market] })).consumed,
+      oiDeltas: (market, indices) => Promise.all(indices.map((i) => client.readContract({ address: pool, abi: FOLDED_ABI, functionName: "oiDelta", args: [market, i] }))),
+      ratiosPlusOne: (deltas) => Promise.all(deltas.map((d) => client.readContract({ address: pool, abi: FOLDED_ABI, functionName: "foldedRatioPlusOne", args: [d] }))),
+    };
+    try {
+      await this.folded.refresh(this.markets.map((m) => ({ id: m.id, stamp: `${m.fundingLastEpoch}:${m.fundingEpochs}` })), reader);
+    } catch (error) {
+      throw new ServiceDown(RPC_SOURCE, error instanceof Error ? error.message : "claim ratios unavailable");
+    }
+  }
+
+  /** From the last syncFoldedRatios. Null until the claim's epoch has folded. */
+  foldedRatio(delta: Hex): bigint | null {
+    return this.folded.get(delta);
   }
 
   fundingIndexAt(market: bigint, block: bigint): bigint | null {

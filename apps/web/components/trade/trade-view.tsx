@@ -82,7 +82,7 @@ export function TradeView({ marketKey, mode: requestedMode }: { marketKey: strin
         </div>
 
         <div className={styles.chartArea} data-section-hidden={section !== "chart"} role="tabpanel" id={tabPanelId("trade-section", "chart")} aria-labelledby={tabId("trade-section", "chart")}>
-          <PrivateChart key={m.key} history={privateMarket?.history ?? []} levels={levels} />
+          <PrivateChart key={m.key} symbol={m.symbol} history={privateMarket?.history ?? []} levels={levels} />
         </div>
 
         <div className={styles.ticketArea} data-section-hidden={section !== "trade"} role="tabpanel" id={tabPanelId("trade-section", "trade")} aria-labelledby={tabId("trade-section", "trade")}>

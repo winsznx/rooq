@@ -149,6 +149,8 @@ const SYNC_COPY: Record<string, string> = {
   RELAYER_UNAVAILABLE: "The relayer isn't answering",
   NETWORK_UNREACHABLE: "The network can't be reached",
   ROOT_MISMATCH: "The read service disagreed with the tree this wallet built",
+  CHAIN_MISMATCH: "The read service served data the chain doesn't have",
+  DEPLOYMENT_MISMATCH: "The read service named different Rooq contracts than this site trusts",
   SYNC_FAILED: "This wallet couldn't update",
 };
 
@@ -166,13 +168,21 @@ export function SyncBadge() {
   );
 }
 
+/** Shown on an old deployment: the account still reads, and this is how a tester gets their money onto the new one. */
+const MOVE_FUNDS_COPY = "Rooq's private testnet is moving to a new deployment. What you see here is your money on the old one, which this version of the site can read but not move. To move your funds, withdraw them to your wallet on the previous version of the site, then move money in again once the new deployment is live.";
+
 export function ServiceNotice() {
   const view = useView();
-  if (!view?.sync.error) return null;
+  if (!view) return null;
   return (
-    <p className="notice" data-tone="warning" role="alert">
-      {`${SYNC_COPY[view.sync.error] ?? view.sync.error}. Figures below are from the last good read. Private actions won't run until this clears, and nothing falls back to a public path.`}
-    </p>
+    <>
+      {view.legacy ? <p className="notice" data-tone="warning" role="status" data-testid="move-funds">{MOVE_FUNDS_COPY}</p> : null}
+      {view.sync.error ? (
+        <p className="notice" data-tone="warning" role="alert">
+          {`${SYNC_COPY[view.sync.error] ?? view.sync.error}. Figures below are from the last good read. Private actions won't run until this clears, and nothing falls back to a public path.`}
+        </p>
+      ) : null}
+    </>
   );
 }
 

@@ -6,7 +6,7 @@ import { useAccount, useSignMessage, useSwitchChain, useWalletClient } from "wag
 import { CHAIN_CONFIG } from "@/lib/env";
 import { Dialog } from "@/components/feedback/dialog";
 import { setHideValues } from "@/lib/preferences";
-import { ACCOUNT_MESSAGE } from "@/lib/private/account";
+import { accountMessage } from "@/lib/private/account";
 import { closeAccountSheet, usePrivate, wallet, WalletError } from "@/lib/private/client";
 import { createPasskey, passkeysAvailable, PasskeyUnsupported, assertPasskey as readPasskey } from "@/lib/private/passkey";
 import { styles } from "./kit";
@@ -97,13 +97,14 @@ function Sheet({ address }: { address: string | undefined }) {
           throw new WalletError("ACCOUNT_NOT_AUTHORIZED", "Your wallet didn't share this account with Rooq. Pick it in your wallet and try again.");
         }
       }
-      const first = await signMessageAsync({ message: ACCOUNT_MESSAGE });
+      const message = accountMessage(address!);
+      const first = await signMessageAsync({ message });
       if (verified) {
         await wallet.openSigned(address!, first);
         return;
       }
       setBusy("Signing again to check this wallet");
-      const second = await signMessageAsync({ message: ACCOUNT_MESSAGE });
+      const second = await signMessageAsync({ message });
       await wallet.openSignedTwice(address!, first, second);
     });
 

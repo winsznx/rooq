@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CandlestickSeries,
-  ColorType,
   LineSeries,
   createChart,
   createSeriesMarkers,
@@ -19,6 +18,7 @@ import {
 import type { ChartResponse } from "@rooq/sdk";
 import { copy } from "@rooq/ui";
 import { useChart, useTrades } from "@/lib/api-hooks";
+import { chartTheme, cssVar } from "@/lib/chart-theme";
 import { Segmented } from "../primitives";
 import styles from "./trade.module.css";
 
@@ -51,27 +51,9 @@ export interface ChartLevel {
   readonly tone: "entry" | "liquidation";
 }
 
-function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
 /** Display only: chart pixels need floats. Money math never uses this. */
 function toNumber(wadString: string): number {
   return Number(BigInt(wadString) / 10n ** 12n) / 1e6;
-}
-
-function chartTheme() {
-  return {
-    layout: {
-      background: { type: ColorType.Solid, color: "transparent" },
-      textColor: cssVar("--rq-ink-secondary"),
-      fontFamily: cssVar("--rq-font-data-stack") || "IBM Plex Mono",
-      attributionLogo: false,
-    },
-    grid: { vertLines: { color: cssVar("--rq-chart-grid") }, horzLines: { color: cssVar("--rq-chart-grid") } },
-    rightPriceScale: { borderColor: cssVar("--rq-line") },
-    timeScale: { borderColor: cssVar("--rq-line"), timeVisible: true },
-  };
 }
 
 function seriesTheme() {

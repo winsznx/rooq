@@ -58,6 +58,7 @@ export function PositionCard({ p, onOpen }: { p: PositionView; onOpen: () => voi
       </div>
       {p.status === "open" && fundingCost !== 0n ? <p className={styles.note}><PV>{`${fundingCost > 0n ? "Owed" : "Earned"}: ${formatFixed(fundingCost < 0n ? -fundingCost : fundingCost, token.decimals, 4)} ${token.symbol}`}</PV> funding since the last settlement.</p> : null}
       {p.exitMatureAt !== null && view.chainNow !== null && p.status === "open" ? <p className={styles.note}>{p.exitMatureAt > view.chainNow ? `Closes in ${countdown(p.exitMatureAt - view.chainNow)}. Liquidation still applies during the wait.` : "This exit has matured. A risk worker closes it at the next fresh price."}</p> : null}
+      {p.status === "open" && p.gate?.state === "cooldown" && view.chainNow !== null && p.gate.nextChangeAt > view.chainNow ? <p className={styles.note}>{`Changed recently. Next change possible in ${countdown(p.gate.nextChangeAt - view.chainNow)}.`}</p> : null}
       {p.outcome ? <p className={styles.note}>Paid out <PV>{amountText(view, p.asset, p.outcome.payout ?? 0n)}</PV>{p.outcome.mark !== null ? ` at mark ${px(p.outcome.mark)}` : ""}.</p> : null}
     </div>
   );
@@ -80,6 +81,22 @@ function FundingTable({ p, view }: { p: PositionView; view: PrivateView }) {
   );
 }
 
+/**
+ * Why a change can't run right now, or null when it can. `add` is the top-up being considered, so a cure big enough to
+ * reach initial margin passes inside the window.
+ */
+function changeBlock(view: PrivateView, p: PositionView, kind: "add" | "remove" | "reduce", add: bigint | null): string | null {
+  const g = p.gate;
+  if (!g || g.state === "open") return null;
+  if (g.state === "legacy") return "This position is on Rooq's old testnet deployment. This version of the site can't change it.";
+  if (g.state === "exit_matured") return "This position's forced exit has matured, so it can't be changed. It closes at the next fresh price.";
+  const wait = view.chainNow !== null && g.nextChangeAt > view.chainNow ? `Next change possible in ${countdown(g.nextChangeAt - view.chainNow)}.` : "Next change possible in a moment.";
+  if (kind !== "add") return `This position changed less than 10 minutes ago. ${wait}`;
+  if (g.cureFrom === null) return `This position changed less than 10 minutes ago. Inside that window only a top-up that brings it back to initial margin can run, and it's above initial margin now. ${wait}`;
+  if (add !== null && add >= g.cureFrom) return null;
+  return `This position changed less than 10 minutes ago and is below initial margin. Inside that window a top-up has to bring it back to initial margin: add at least ${amountText(view, p.asset, g.cureFrom)}. ${wait}`;
+}
+
 export function PositionDialog({ id, onClose }: { id: string | null; onClose: () => void }) {
   const view = useView();
   const [panel, setPanel] = useState<Panel>("margin");
@@ -95,6 +112,8 @@ export function PositionDialog({ id, onClose }: { id: string | null; onClose: ()
   const parsed = parseDecimal(amount, token.decimals);
   const reduceWad = parseDecimal(reduce, 18);
   const isTaker = p.side === "taker";
+  const marginBlock = changeBlock(view, p, mode, mode === "add" ? parsed : null);
+  const reduceBlock = changeBlock(view, p, "reduce", null);
   const start = (t: Parameters<typeof wallet.start>[0], label: string) => {
     void wallet.start(t, label, "/app/portfolio");
     onClose();
@@ -113,8 +132,9 @@ export function PositionDialog({ id, onClose }: { id: string | null; onClose: ()
           <div className={styles.stack}>
             <Tabs group="mm" label="Add or remove" value={mode} onChange={setMode} tabs={[{ value: "add", label: "Add" }, { value: "remove", label: "Remove" }]} />
             <AmountField label={mode === "add" ? "Add margin" : "Remove margin"} value={amount} onChange={setAmount} decimals={token.decimals} unit={token.symbol} balanceLabel={mode === "add" ? "Private balance" : "Your margin"} balance={mode === "add" ? balanceOf(view, p.asset) : myMargin(p)} />
-            <p className={styles.note}>{mode === "remove" ? "You must stay above initial margin at a fresh price, counting gains only up to what your counterparty has posted." : "Added from your private balance, using one note."}</p>
-            <button type="button" className="btn btn-primary btn-block" disabled={parsed === null || parsed <= 0n} onClick={() => parsed !== null && start({ t: "update", position: p.id, add: mode === "add" ? parsed : 0n, remove: mode === "remove" ? parsed : 0n, reduce: 0n }, `${mode === "add" ? "Add" : "Remove"} margin on ${title}`)}>
+            <p className={styles.note}>{mode === "remove" ? "You must stay above initial margin at a fresh price, counting gains only up to what your counterparty has posted." : "Added from your private balance, using one note."} A position can change once every 10 minutes, except for a top-up that brings it back to initial margin.</p>
+            {marginBlock ? <p className="notice" role="status">{marginBlock}</p> : null}
+            <button type="button" className="btn btn-primary btn-block" disabled={parsed === null || parsed <= 0n || marginBlock !== null} onClick={() => parsed !== null && start({ t: "update", position: p.id, add: mode === "add" ? parsed : 0n, remove: mode === "remove" ? parsed : 0n, reduce: 0n }, `${mode === "add" ? "Add" : "Remove"} margin on ${title}`)}>
               {mode === "add" ? "Add margin" : "Remove margin"}
             </button>
           </div>
@@ -123,7 +143,8 @@ export function PositionDialog({ id, onClose }: { id: string | null; onClose: ()
           <div className={styles.stack}>
             <AmountField label="Reduce size" value={reduce} onChange={setReduce} decimals={18} unit={m?.label ?? ""} balanceLabel="Position size" balance={p.size} />
             <p className={styles.note}>Settles at mark less the spread your maker committed to at open.</p>
-            <button type="button" className="btn btn-primary btn-block" disabled={reduceWad === null || reduceWad <= 0n || reduceWad >= p.size} onClick={() => reduceWad !== null && start({ t: "update", position: p.id, add: 0n, remove: 0n, reduce: reduceWad }, `Reduce ${title}`)}>Reduce position</button>
+            {reduceBlock ? <p className="notice" role="status">{reduceBlock}</p> : null}
+            <button type="button" className="btn btn-primary btn-block" disabled={reduceWad === null || reduceWad <= 0n || reduceWad >= p.size || reduceBlock !== null} onClick={() => reduceWad !== null && start({ t: "update", position: p.id, add: 0n, remove: 0n, reduce: reduceWad }, `Reduce ${title}`)}>Reduce position</button>
           </div>
         ) : null}
         {panel === "close" ? (

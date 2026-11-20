@@ -1,15 +1,18 @@
 import {
-  CLAIM_CT_LEN, CLAIM_CT_WINNER, CLOSE_MATURED, closeOutcome, deriveKeys, depositOpening, liquidationOutcome, LOCK_CT_LEN, lockAddressKeys, lockCommitment, LP_CT_LEN, lpCommitment, noteCommitment, noteInner, openClaim, openLock, openLp,
-  openPair, outputRho, ownerNullifier, PAIR_CT_LEN, PAIR_CT_MAKER, PAIR_CT_TAKER, pairCommitment, recNullifier, RECORD_CLAIM, RECORD_FREE, RECORD_LOCK, RECORD_LP, RECORD_PAIR, ROLE_LP, ROLE_MAKER, ROLE_SWAP, ROLE_TAKER, scanCreated, toHex32, updateOutcome,
-  ACTOR_NONE, claimCommitment, type ClaimRecord, type LockRecord, type LpRecord, type OwnedNote, type PairRecord, type WalletKeys,
+  CLAIM_CT_LEN, CLAIM_CT_WINNER, CLOSE_MATURED, closeOutcome, depositDerivation, deriveKeys, depositOpening, liquidationOutcome, LOCK_CT_LEN, lockAddressKeys, LP_CT_LEN, noteCommitment, noteInner, openClaim, openLock, openLp,
+  openPair, outputRho, ownerNullifier, PAIR_CT_LEN, PAIR_CT_MAKER, PAIR_CT_TAKER, recNullifier, RECORD_CLAIM, RECORD_FREE, RECORD_LOCK, RECORD_LP, RECORD_PAIR, ROLE_LP, ROLE_MAKER, ROLE_SWAP, ROLE_TAKER, scanCreated, toHex32, updateOutcome,
+  ACTOR_NONE, TAKER_GRACE, type ClaimRecord, type CreatedNotes, type LockRecord, type LpRecord, type OwnedNote, type PairRecord, type WalletKeys,
 } from "@rooq/private-sdk";
+import { noteCommitmentV1, openLockV1, openPairV1, PAIR_PT_LEN_V1, scanCreatedV1 } from "@rooq/private-sdk/legacy/v1";
 import { getAddress, type Hex } from "viem";
 import { formatFixed } from "@rooq/sdk";
 import type { ChainState, RecordRow } from "./chain-state";
+import type { RecordVersion } from "./deployment-pin";
+import { changeGate } from "./position-gate";
 import type { ActivityEntry, BalanceView, ClaimView, FundingEntry, LockRole, LockView, LpView, PositionView, PrivateView } from "./types";
 
 const ADDRESS_GAP = 30;
-const DEPOSIT_GAP = 20;
+export const DEPOSIT_GAP = 20;
 
 export type HeldNote = OwnedNote & { readonly keys: WalletKeys; readonly keyIndex: number; readonly block: bigint };
 
@@ -57,6 +60,45 @@ export interface HeldLp {
   readonly block: bigint;
 }
 
+/**
+ * How one deployment's records open. Picked by the pinned record version, never by trial decoding. The v1 reader covers
+ * what a tester needs to see before moving funds off the old deployment: notes, locks and pairs. Claims and LP records
+ * have no v1 opener in the SDK, so an old deployment shows none.
+ */
+interface RecordReader {
+  readonly legacy: boolean;
+  /** Width of one pair ciphertext slot: a v1 pair has one field fewer than a v2 pair. */
+  readonly pairCtLen: number;
+  readonly noteCommitment: (deployment: bigint, asset: bigint, value: bigint, inner: bigint) => bigint;
+  readonly scanCreated: (keys: WalletKeys, deployment: bigint, events: readonly CreatedNotes[]) => OwnedNote[];
+  readonly openLock: (ct: readonly bigint[], sk: bigint, deployment: bigint, commitment: bigint) => LockRecord | null;
+  readonly openPair: (ct: readonly bigint[], sk: bigint, deployment: bigint, commitment: bigint) => PairRecord | null;
+  readonly openClaim: (ct: readonly bigint[], sk: bigint, deployment: bigint, commitment: bigint) => ClaimRecord | null;
+  readonly openLp: (ct: readonly bigint[], sk: bigint, deployment: bigint, commitment: bigint) => LpRecord | null;
+}
+
+const CURRENT_READER: RecordReader = { legacy: false, pairCtLen: PAIR_CT_LEN, noteCommitment, scanCreated, openLock, openPair, openClaim, openLp };
+
+/** A v1 pair has no timestamp; 0 is also what a cooldown check against it would allow. */
+const V1_READER: RecordReader = {
+  legacy: true, pairCtLen: PAIR_PT_LEN_V1 + 2, noteCommitment: noteCommitmentV1, scanCreated: scanCreatedV1, openLock: openLockV1,
+  openPair: (ct, sk, deployment, commitment) => {
+    const p = openPairV1(ct, sk, deployment, commitment);
+    return p ? { ...p, updatedAt: 0n } : null;
+  },
+  openClaim: () => null,
+  openLp: () => null,
+};
+
+export const readerFor = (version: RecordVersion): RecordReader => (version === 1 ? V1_READER : CURRENT_READER);
+
+/**
+ * Funding settled between two versions, with no owner action. Price, margin and timing rules don't apply to a settlement,
+ * so the as-of sits past both the (zero) cooldown and the taker grace.
+ */
+const settled = (p: PairRecord, fundingIndex: bigint, scale: bigint) =>
+  updateOutcome(p, { actor: ACTOR_NONE, add: 0n, remove: 0n, reduce: 0n }, 0n, 0n, scale, fundingIndex, 0n, { mmrWad: 0n, asOf: p.updatedAt + TAKER_GRACE, minGap: 0n });
+
 const roleOf = (role: bigint): LockRole => (role === ROLE_TAKER ? "taker" : role === ROLE_MAKER ? "maker" : role === ROLE_SWAP ? "swap" : "lp");
 const hex20 = (x: bigint): Hex => `0x${x.toString(16).padStart(40, "0")}`;
 
@@ -69,6 +111,8 @@ export interface Decoded {
   readonly lps: readonly HeldLp[];
   readonly nextAddress: number;
   readonly nextDeposit: number;
+  /** Records of an old deployment, read through the frozen v1 reader. */
+  readonly legacy: boolean;
 }
 
 /**
@@ -84,8 +128,16 @@ export class Scanner {
   private readonly claimCache = new Map<string, ClaimRecord | null>();
   private readonly lpCache = new Map<string, LpRecord | null>();
 
-  constructor(readonly seed: bigint) {
+  private readonly reader: RecordReader;
+
+  constructor(readonly seed: bigint, private readonly recordVersion: RecordVersion = 2) {
     this.main = deriveKeys(seed);
+    this.reader = readerFor(recordVersion);
+  }
+
+  /** The k-th deposit's opening on `deployment`: bound to the deployment id from record version 2 on. */
+  depositOpening(k: number, deployment: bigint): { readonly rho: bigint; readonly blind: bigint } {
+    return depositOpening(this.seed, k, depositDerivation(this.recordVersion, deployment));
   }
 
   address(index: number): WalletKeys {
@@ -99,6 +151,7 @@ export class Scanner {
 
   decode(chain: ChainState): Decoded {
     const dep = chain.deployment!;
+    const rd = this.reader;
     const spent = chain.spent;
     const isSpent = (nf: bigint) => spent.has(toHex32(nf));
     const lockRows = chain.records.filter((r) => r.kind === RECORD_LOCK);
@@ -106,7 +159,7 @@ export class Scanner {
     for (const r of lockRows) {
       let record = this.lockCache.get(r.commitment);
       if (record === undefined) {
-        record = openLock(r.ciphertext.slice(0, LOCK_CT_LEN), this.main.encSk, dep.id, r.commitment);
+        record = rd.openLock(r.ciphertext.slice(0, LOCK_CT_LEN), this.main.encSk, dep.id, r.commitment);
         this.lockCache.set(r.commitment, record);
       }
       if (record) ownLocks.push({ row: r, record });
@@ -136,7 +189,7 @@ export class Scanner {
     const byInner = new Map<bigint, (typeof chain.deposits)[number][]>();
     for (const d of chain.deposits) byInner.set(d.inner, [...(byInner.get(d.inner) ?? []), d]);
     for (let k = 0, misses = 0; misses < DEPOSIT_GAP; k++) {
-      const { rho, blind } = depositOpening(this.seed, k);
+      const { rho, blind } = this.depositOpening(k, dep.id);
       const found = byInner.get(noteInner(this.main.owner, rho, blind));
       if (!found) {
         misses++;
@@ -145,7 +198,7 @@ export class Scanner {
       misses = 0;
       nextDeposit = k + 1;
       for (const d of found) {
-        const cm = noteCommitment(dep.id, d.asset, d.amount, d.inner);
+        const cm = rd.noteCommitment(dep.id, d.asset, d.amount, d.inner);
         allNotes.push({ leafIndex: d.leafIndex, asset: d.asset, value: d.amount, rho, blind, commitment: cm, nullifier: ownerNullifier(this.main.nk, cm), keys: this.main, keyIndex: -1, block: d.block });
       }
     }
@@ -156,7 +209,7 @@ export class Scanner {
         const key = `${keys.pk.x}:${r.commitment}`;
         let n = this.noteCache.get(key);
         if (n === undefined) {
-          n = scanCreated(keys, dep.id, [{ firstLeafIndex: r.leafIndex, commitments: [r.commitment], ciphertexts: [r.ciphertext] }])[0] ?? null;
+          n = rd.scanCreated(keys, dep.id, [{ firstLeafIndex: r.leafIndex, commitments: [r.commitment], ciphertexts: [r.ciphertext] }])[0] ?? null;
           this.noteCache.set(key, n);
         }
         if (n) allNotes.push({ ...n, keys, keyIndex: index, block: r.block });
@@ -182,20 +235,20 @@ export class Scanner {
           const key = `${a.keys.pk.x}:${r.commitment}`;
           let p = this.pairCache.get(key);
           if (p === undefined) {
-            p = openPair(r.ciphertext.slice(slot * PAIR_CT_LEN, (slot + 1) * PAIR_CT_LEN), a.keys.encSk, dep.id, r.commitment);
+            p = rd.openPair(r.ciphertext.slice(slot * rd.pairCtLen, (slot + 1) * rd.pairCtLen), a.keys.encSk, dep.id, r.commitment);
             this.pairCache.set(key, p);
           }
-          if (p) versions.push({ pair: p, leafIndex: r.leafIndex, commitment: r.commitment, nullifier: recNullifier(pairCommitment(dep.id, p), p.recNonce), block: r.block });
+          if (p) versions.push({ pair: p, leafIndex: r.leafIndex, commitment: r.commitment, nullifier: recNullifier(r.commitment, p.recNonce), block: r.block });
         }
         if (versions.length > 0) positions.push({ id: `p:${a.index}`, keyIndex: a.index, keys: a.keys, side, versions });
         for (const r of claimRows) {
           const key = `${a.keys.pk.x}:${r.commitment}`;
           let c = this.claimCache.get(key);
           if (c === undefined) {
-            c = openClaim(r.ciphertext.slice(CLAIM_CT_WINNER * CLAIM_CT_LEN, (CLAIM_CT_WINNER + 1) * CLAIM_CT_LEN), a.keys.encSk, dep.id, r.commitment);
+            c = rd.openClaim(r.ciphertext.slice(CLAIM_CT_WINNER * CLAIM_CT_LEN, (CLAIM_CT_WINNER + 1) * CLAIM_CT_LEN), a.keys.encSk, dep.id, r.commitment);
             this.claimCache.set(key, c);
           }
-          if (c) claims.push({ record: c, leafIndex: r.leafIndex, commitment: r.commitment, nullifier: recNullifier(claimCommitment(dep.id, c), c.recNonce), keys: a.keys, block: r.block });
+          if (c) claims.push({ record: c, leafIndex: r.leafIndex, commitment: r.commitment, nullifier: recNullifier(r.commitment, c.recNonce), keys: a.keys, block: r.block });
         }
       }
       if (payoutLock.role === ROLE_LP) {
@@ -203,14 +256,14 @@ export class Scanner {
           const key = `${a.keys.pk.x}:${r.commitment}`;
           let l = this.lpCache.get(key);
           if (l === undefined) {
-            l = openLp(r.ciphertext.slice(0, LP_CT_LEN), a.keys.encSk, dep.id, r.commitment);
+            l = rd.openLp(r.ciphertext.slice(0, LP_CT_LEN), a.keys.encSk, dep.id, r.commitment);
             this.lpCache.set(key, l);
           }
-          if (l) lps.push({ record: l, leafIndex: r.leafIndex, commitment: r.commitment, nullifier: recNullifier(lpCommitment(dep.id, l), l.recNonce), keys: a.keys, block: r.block });
+          if (l) lps.push({ record: l, leafIndex: r.leafIndex, commitment: r.commitment, nullifier: recNullifier(r.commitment, l.recNonce), keys: a.keys, block: r.block });
         }
       }
     }
-    return { notes, allNotesByRho, locks, positions, claims, lps, nextAddress, nextDeposit };
+    return { notes, allNotesByRho, locks, positions, claims, lps, nextAddress, nextDeposit, legacy: rd.legacy };
   }
 }
 
@@ -249,7 +302,7 @@ function fundingHistory(chain: ChainState, h: HeldPosition): FundingEntry[] {
   for (let i = 1; i < h.versions.length; i++) {
     const [p, next] = [h.versions[i - 1]!.pair, h.versions[i]!.pair];
     if (next.fundingIndex === p.fundingIndex) continue;
-    const o = updateOutcome(p, { actor: ACTOR_NONE, add: 0n, remove: 0n, reduce: 0n }, 1n, 0n, m.scale, next.fundingIndex, 0n);
+    const o = settled(p, next.fundingIndex, m.scale);
     out.push({ version: i, takerPays: next.debtByTaker === 1n || p.takerMargin > next.takerMargin, owed: o.fundingOwed, paid: o.fundingPaid, shortfall: next.fundingDebt });
   }
   return out;
@@ -299,9 +352,12 @@ export function buildView(chain: ChainState, d: Decoded, address: string, sync: 
     const status = liveAfter ? "open" : end?.kind === "liquidated" ? "liquidated" : end?.mode === CLOSE_MATURED ? "forced" : "closed";
     const payoutNote = !liveAfter && end ? d.allNotesByRho.get(outputRho(last.nullifier, 0n, h.side === "taker" ? 0 : 1)) : undefined;
     const outcome = status === "open" ? null : { payout: payoutNote?.value ?? 0n, mark: end?.mark ?? null, mode: end?.mode ?? null, block: end?.block ?? null };
+    const exitMatureAt = chain.exits.get(nf) ?? null;
+    const market = chain.markets.find((m) => m.id === p.market);
+    const gate = market ? changeGate({ pair: p, side: h.side, market, now, exitMatureAt, legacy: d.legacy }) : null;
     return {
       id: h.id, side: h.side, status, market: p.market, asset: hex20(p.asset), isShort: p.isShort === 1n, size: p.size, entry: p.entry, closeSpreadBps: p.closeSpread, fundingIndex: p.fundingIndex, takerMargin: p.takerMargin, makerMargin: p.makerMargin,
-      fundingDebt: p.fundingDebt, debtByTaker: p.debtByTaker === 1n, versions: h.versions.length, funding: fundingHistory(chain, h), exitMatureAt: chain.exits.get(nf) ?? null, outcome,
+      fundingDebt: p.fundingDebt, debtByTaker: p.debtByTaker === 1n, versions: h.versions.length, funding: fundingHistory(chain, h), exitMatureAt, outcome, gate,
     };
   });
 
@@ -314,7 +370,7 @@ export function buildView(chain: ChainState, d: Decoded, address: string, sync: 
   const liveLp = new Map<string, HeldLp>();
   for (const h of d.lps) if (!isSpent(h.nullifier)) liveLp.set(`${h.keys.pk.x}:${h.record.pool}`, h);
   for (const h of liveLp.values()) {
-    lp.push({ id: toHex32(h.commitment), pool: h.record.pool, shares: h.record.shares, status: h.record.expiry === 0n ? "idle" : now > h.record.expiry ? "request_expired" : "removing", expiry: h.record.expiry, min0: h.record.min0, min1: h.record.min1 });
+    lp.push({ id: toHex32(h.commitment), pool: h.record.pool, shares: h.record.shares, status: h.record.expiry === 0n ? "idle" : now > h.record.expiry ? "request_expired" : "removing", expiry: h.record.expiry, priceLo: h.record.priceLo, priceHi: h.record.priceHi });
   }
 
   const activity = buildActivity(chain, d, positionsByKey, amt);
@@ -323,7 +379,7 @@ export function buildView(chain: ChainState, d: Decoded, address: string, sync: 
     unlocked: true,
     sync: { syncedBlock: chain.syncedBlock, head: chain.head, processed: chain.processed, queueLength: chain.queueLength, root: chain.root, updatedAt: Date.now(), error: sync.error },
     chainNow: chain.chainNow, health: { readApi: true, relayer: !chain.relayerDown, rpc: true }, tokens: [...chain.tokens.values()], markets: chain.markets, pools: chain.pools, create: chain.create, exitBond: dep.exitBond, pool: dep.pool, relayerFee: chain.relayerFees,
-    address, balances, locks, positions, claims, lp, activity,
+    address, balances, locks, positions, claims, lp, activity, legacy: d.legacy,
   };
 }
 
@@ -331,8 +387,8 @@ export function buildView(chain: ChainState, d: Decoded, address: string, sync: 
 function describeUpdate(a: PairRecord, b: PairRecord, side: "taker" | "maker", scale: bigint | null, label: string, money: (v: bigint) => string): string {
   if (a.size !== b.size) return `Reduced ${label} by ${formatFixed(a.size - b.size, 18, 4)}`;
   const margin = (p: { takerMargin: bigint; makerMargin: bigint }) => (side === "taker" ? p.takerMargin : p.makerMargin);
-  const settled = scale !== null && a.fundingIndex !== b.fundingIndex ? updateOutcome(a, { actor: ACTOR_NONE, add: 0n, remove: 0n, reduce: 0n }, 1n, 0n, scale, b.fundingIndex, 0n) : null;
-  const afterFunding = settled ? margin(settled) : margin(a);
+  const afterSettle = scale !== null && a.fundingIndex !== b.fundingIndex ? settled(a, b.fundingIndex, scale) : null;
+  const afterFunding = afterSettle ? margin(afterSettle) : margin(a);
   const moved = margin(b) - afterFunding;
   if (moved > 0n) return `Added ${money(moved)} margin to ${label}`;
   if (moved < 0n) return `Removed ${money(-moved)} margin from ${label}`;

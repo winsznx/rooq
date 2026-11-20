@@ -169,3 +169,4 @@
 @media (min-width: 1024px) {
   .ctaWrap { bottom: 0; }
 }
+.chartClosed { position: absolute; left: 12px; bottom: 34px; margin: 0; padding: 4px 8px; border-radius: 6px; background: var(--rq-surface); box-shadow: 0 0 0 1px var(--rq-line); color: var(--rq-ink-secondary); font-size: 12px; pointer-events: none; }

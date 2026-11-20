@@ -1,0 +1,657 @@
+/* Operator console. Composes @rooq/ui tokens only; dense and quiet, figures in the data face. */
+
+.shell {
+  min-height: 100dvh;
+  background: var(--rq-app-bg);
+}
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: var(--rq-z-header);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px var(--rq-gutter) 10px;
+  background: var(--rq-app-bg);
+  border-bottom: 1px solid var(--rq-line);
+}
+.topRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.brandName {
+  font-size: 15px;
+  font-weight: 500;
+}
+.topRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.who {
+  display: none;
+  margin-right: 8px;
+  font-size: 12px;
+  color: var(--rq-ink-secondary);
+  white-space: nowrap;
+}
+@media (min-width: 640px) {
+  .who {
+    display: inline;
+  }
+}
+
+.navRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.nav {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.nav::-webkit-scrollbar {
+  display: none;
+}
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--rq-ink-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--rq-t-press) var(--rq-ease), background-color var(--rq-t-press) var(--rq-ease);
+}
+.navLink:hover {
+  color: var(--rq-ink);
+  background: var(--rq-surface-pressed);
+}
+.navLink[aria-current="page"] {
+  color: var(--rq-ink);
+  background: var(--rq-surface);
+  box-shadow: 0 0 0 1px var(--rq-line);
+}
+.navLink:focus-visible {
+  outline-offset: -2px;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 20px var(--rq-gutter) 64px;
+  outline: none;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: var(--rq-ink-secondary);
+}
+.lede {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 13px;
+  color: var(--rq-ink-secondary);
+}
+
+/* One instrument strip: cells share hairlines instead of floating as separate cards. */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--rq-line);
+  border-radius: var(--rq-radius-panel);
+  background: var(--rq-surface);
+}
+@media (min-width: 768px) {
+  .kpis {
+    grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
+  }
+}
+@media (min-width: 1100px) {
+  .kpis[data-columns] {
+    grid-template-columns: repeat(var(--kpi-columns), minmax(0, 1fr));
+  }
+}
+.kpi {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px 10px;
+  box-shadow: 1px 0 0 var(--rq-line), 0 1px 0 var(--rq-line);
+}
+.kpiLabel {
+  font-size: 12px;
+  color: var(--rq-ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kpiValue {
+  font-family: var(--rq-font-data-stack);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kpi[data-tone="warning"] .kpiValue {
+  color: var(--rq-warning);
+}
+.kpiSub {
+  font-size: 12px;
+  color: var(--rq-ink-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.spark {
+  width: 100%;
+  height: 26px;
+  margin-top: 6px;
+  color: var(--rq-accent);
+}
+.sparkEmpty {
+  height: 26px;
+  margin-top: 6px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+@media (min-width: 1100px) {
+  .split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.figure {
+  margin: 0;
+  min-width: 0;
+  border: 1px solid var(--rq-line);
+  border-radius: var(--rq-radius-panel);
+  background: var(--rq-surface);
+}
+.figHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 12px 16px 0;
+}
+.figTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--rq-ink-secondary);
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legendValue {
+  font-family: var(--rq-font-data-stack);
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--rq-ink);
+}
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--rq-ink-tertiary);
+}
+.swatch[data-kind="line"] {
+  height: 2px;
+  border-radius: 1px;
+}
+.swatch[data-tone="accent"] {
+  background: var(--rq-accent);
+}
+.swatch[data-tone="ink"] {
+  background: var(--rq-ink);
+}
+.swatch[data-tone="muted"] {
+  background: var(--rq-ink-tertiary);
+}
+.swatch[data-tone="faint"] {
+  background: var(--rq-line-strong);
+}
+.canvas {
+  height: 220px;
+  margin: 8px 4px 4px;
+}
+@media (min-width: 768px) {
+  .canvas {
+    height: 260px;
+  }
+}
+.figEmpty {
+  display: grid;
+  align-content: center;
+  min-height: 220px;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.tableNote {
+  margin: 0;
+  padding: 10px 16px 12px;
+  font-size: 12px;
+  color: var(--rq-ink-tertiary);
+}
+
+/* Share of the column total, drawn behind nothing and read by nobody: the numbers carry it. */
+.share {
+  display: block;
+  width: 72px;
+  height: 4px;
+  margin-left: auto;
+  border-radius: 2px;
+  background: var(--rq-surface-pressed);
+  overflow: hidden;
+}
+.shareFill {
+  display: block;
+  height: 100%;
+  background: var(--rq-accent);
+}
+.key {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.withDetails > td,
+.withDetails > th {
+  border-bottom: 0;
+}
+.subRow td {
+  height: auto;
+  padding-top: 0;
+  padding-bottom: 12px;
+  white-space: normal;
+}
+.subRow:hover {
+  background: transparent !important;
+}
+.details summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  font-size: 12px;
+  color: var(--rq-ink-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.details summary:hover {
+  color: var(--rq-ink);
+}
+.counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 24px;
+  max-width: 880px;
+  margin: 4px 0 0;
+}
+.error {
+  max-width: 48ch;
+  white-space: normal;
+  color: var(--rq-warning);
+}
+.errorAge {
+  display: block;
+  color: var(--rq-ink-tertiary);
+}
+
+.gate {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px var(--rq-gutter);
+  background: var(--rq-app-bg);
+}
+
+/* Network switch. On a phone it takes its own row under the brand so the actions never squeeze. */
+.network {
+  order: 3;
+  flex-basis: 100%;
+}
+.network > :global(.seg) {
+  display: grid;
+  width: 100%;
+  grid-auto-columns: minmax(0, 1fr);
+}
+@media (min-width: 640px) {
+  .network {
+    order: 0;
+    flex-basis: auto;
+  }
+  .network > :global(.seg) {
+    display: inline-grid;
+    width: auto;
+    grid-auto-columns: minmax(44px, auto);
+  }
+}
+
+/* Chart drawn inside a panel that already frames and titles it. */
+.figure[data-plain] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.figure[data-plain] .figHead {
+  justify-content: flex-end;
+}
+
+.panelBody {
+  padding: 14px 16px 16px;
+}
+.panelMeta {
+  font-size: 12px;
+  color: var(--rq-ink-tertiary);
+  white-space: nowrap;
+}
+
+/* The one loud figure on the page: money moved since deployment. */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  border: 1px solid var(--rq-line);
+  border-radius: var(--rq-radius-panel);
+  background: var(--rq-surface);
+}
+@media (min-width: 1100px) {
+  .hero {
+    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  }
+  .heroFigures {
+    box-shadow: 1px 0 0 var(--rq-line);
+  }
+}
+.heroFigures {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
+}
+.heroHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.heroValue {
+  display: block;
+  font-family: var(--rq-font-data-stack);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-size: 36px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+@media (min-width: 768px) {
+  .heroValue {
+    font-size: 48px;
+  }
+}
+.heroCaption {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--rq-ink-secondary);
+}
+.heroChart {
+  min-width: 0;
+}
+
+/* Label over value pairs, two to a row: dense but readable at a glance. */
+.figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 0;
+}
+@media (min-width: 768px) {
+  .figures[data-wide] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.figures > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.figures dt {
+  font-size: 12px;
+  color: var(--rq-ink-secondary);
+}
+.figures dd {
+  margin: 0;
+  font-family: var(--rq-font-data-stack);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-size: 16px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.figureSub {
+  display: block;
+  font-family: var(--rq-font-ui, inherit);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--rq-ink-tertiary);
+  white-space: normal;
+}
+.note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--rq-ink-tertiary);
+}
+
+/* Two-part bar: each part carries its own text label, never colour alone. */
+.splitBar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--rq-surface-pressed);
+}
+.splitPart {
+  display: block;
+  height: 100%;
+  min-width: 0;
+}
+.splitPart[data-tone="accent"] {
+  background: var(--rq-accent);
+}
+.splitPart[data-tone="muted"] {
+  background: var(--rq-ink-tertiary);
+}
+.splitLegend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  font-size: 12px;
+  color: var(--rq-ink-secondary);
+}
+
+.donutLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 16px;
+}
+@media (min-width: 480px) {
+  .donutLayout {
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: stretch;
+    align-items: center;
+    gap: 24px;
+  }
+}
+.donut {
+  position: relative;
+  width: 168px;
+  height: 168px;
+}
+.donutRing {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.donutTrack {
+  stroke: var(--rq-surface-pressed);
+}
+.donutArc {
+  stroke: var(--rq-line-strong);
+}
+.donutArc[data-tone="accent"] {
+  stroke: var(--rq-accent);
+}
+.donutArc[data-tone="ink"] {
+  stroke: var(--rq-ink);
+}
+.donutArc[data-tone="muted"] {
+  stroke: var(--rq-ink-tertiary);
+}
+.donutCenter {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 0 28px;
+  text-align: center;
+}
+.donutValue {
+  font-family: var(--rq-font-data-stack);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.donutLabel {
+  font-size: 11px;
+  color: var(--rq-ink-tertiary);
+}
+.shares {
+  display: grid;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shares > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  box-shadow: 0 1px 0 var(--rq-line);
+}
+.shares > li:last-child {
+  box-shadow: none;
+}
+.shares .swatch {
+  align-self: center;
+}
+.shareName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shareValue {
+  font-family: var(--rq-font-data-stack);
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+.sharePct {
+  min-width: 5ch;
+  font-family: var(--rq-font-data-stack);
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--rq-ink-secondary);
+  text-align: right;
+}
+
+.panelSkeleton {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}

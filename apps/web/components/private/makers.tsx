@@ -28,7 +28,8 @@ function BackingForm({ markets }: { markets: readonly MarketView[] }) {
   const spreadBps = /^\d+$/.test(spread) ? BigInt(spread) : null;
   const closeBps = /^\d+$/.test(closeSpread) ? BigInt(closeSpread) : null;
   const free = balanceOf(view, m.collateral);
-  const ok = backing !== null && backing > 0n && (!unlocked || backing <= free) && size !== null && size > 0n && size <= m.maxPairSize && spreadBps !== null && closeBps !== null;
+  const overCap = closeBps !== null && m.maxCloseSpreadBps !== null && closeBps > m.maxCloseSpreadBps;
+  const ok = !overCap && backing !== null && backing > 0n && (!unlocked || backing <= free) && size !== null && size > 0n && size <= m.maxPairSize && spreadBps !== null && closeBps !== null;
   const go = () => {
     if (!ok || backing === null || size === null || spreadBps === null || closeBps === null) return;
     void wallet.start({ t: "makerLock", market: m.id, spreadBps, maxSize: size, closeSpreadBps: closeBps, amount: backing, expiry }, `Back ${m.label}`, "/app/makers").then(() => {
@@ -49,7 +50,7 @@ function BackingForm({ markets }: { markets: readonly MarketView[] }) {
       <div className="field">
         <label className="field-label" htmlFor="mk-close"><span>Close spread you commit to, in bps</span></label>
         <input id="mk-close" className="input-text" inputMode="numeric" value={closeSpread} onChange={(e) => setCloseSpread(e.target.value)} />
-        <div className="field-foot"><span>A taker can close against this spread with no signature from you, for the life of the position.</span></div>
+        <div className="field-foot"><span>{overCap ? `This market caps the close spread at ${m.maxCloseSpreadBps} bps. Backing above it is never matched.` : `A taker can close against this spread with no signature from you, for the life of the position.${m.maxCloseSpreadBps !== null ? ` This market caps it at ${m.maxCloseSpreadBps} bps.` : ""}`}</span></div>
       </div>
       <ExpiryPicker value={expiry} onChange={setExpiry} />
       <Line label="Used as margin per fill">Only the required margin, the rest stays reserved</Line>

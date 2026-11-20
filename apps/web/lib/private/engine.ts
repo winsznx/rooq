@@ -1,13 +1,15 @@
 import {
-  ACTOR_MAKER, ACTOR_TAKER, addressOf, CLOSE_TAKER, closeWitness, depositOpening, exitRequestWitness, lockCommitment, lockWitness, lpSetWitness, lpTerms, makerTerms, noteInner, outputRho, randomField, redeemWitness, releaseWitness, spendWitness, swapTerms,
-  takerTerms, toHex32, updateWitness, type InputMap, type LockTerms, type Proof, type PrivateAddress,
+  ACTOR_MAKER, ACTOR_TAKER, addressOf, CLOSE_TAKER, closeWitness, exitRequestWitness, lockCommitment, lockWitness, lpBandTerms, lpSetWitness, makerTerms, MAX_INTENT_LIFETIME, MAX_MAKER_LIFETIME, noteInner, outputRho, randomField,
+  redeemWitness, releaseWitness, ROLE_MAKER, spendWitness, swapTerms, takerTerms, toHex32, updateWitness, zeroRelayFee, type InputMap, type LockTerms, type Proof, type PrivateAddress,
 } from "@rooq/private-sdk";
 import type { Hex } from "viem";
-import { ChainState, RelayRefused, ServiceDown } from "./chain-state";
+import { CHAIN_MISMATCH, ChainState, RelayRefused, ServiceDown } from "./chain-state";
+import { DEPLOYMENT_MISMATCH } from "./deployment-pin";
+import { DepositReservations, reserveUnused, type DepositReservation, type ReceiptStatus } from "./deposit-reservations";
 import { Named } from "./named";
 import { decodeAddress } from "./address";
 import { prove, ProofFailed, type WalletCircuit } from "./prover";
-import { buildView, largestPair, Scanner, selectNotes, type Decoded, type HeldNote, type HeldPosition } from "./scanner";
+import { buildView, DEPOSIT_GAP, largestPair, Scanner, selectNotes, type Decoded, type HeldNote, type HeldPosition } from "./scanner";
 import type { Intent, OpIcon, PrivateOp, PrivateView, StartOp } from "./types";
 import type { OperationKind, OperationStage, OperationStep } from "@/lib/operations";
 
@@ -33,6 +35,11 @@ const RETRY_REASONS = new Set(["INVALID_PROOF", "UNKNOWN_ROOT", "STALE_AS_OF", "
 const MAX_ATTEMPTS = 3;
 const RELAYER_DOWN: ReadonlySet<string> = new Set(["RELAYER_UNAVAILABLE", "QUEUE_FULL", "INSUFFICIENT_GAS", "RPC_UNAVAILABLE", "NOT_READY", "TX_TIMEOUT"]);
 const NOT_IN_TREE_WAIT_MS = 180_000;
+/**
+ * How often every open account reads the folded claim ratios. Fixed, and the same whether or not the wallet holds a
+ * claim, so the RPC can't tell a claim holder from anyone else by when the reads happen.
+ */
+const FOLDED_RATIOS_EVERY_MS = 15_000;
 const ACTIVE: ReadonlySet<OperationStage> = new Set(["checking", "awaiting_signature", "preparing_proof", "queued", "submitted", "included", "waiting", "rechecking"]);
 
 const REASON_COPY: Record<string, string> = {
@@ -49,7 +56,10 @@ const REASON_COPY: Record<string, string> = {
   RELAYER_FEE_ASSET: "The relayer doesn't take fees in this asset.",
   RELAYER_FEE_TOO_LOW: "The fee is below the relayer's minimum.",
   ORACLE_STALE: "The market price is out of date, so this can't be priced right now.",
+  EXIT_MATURED: "This position's forced exit has matured, so it can't be changed. It closes at the next fresh price.",
 };
+
+const OLD_DEPLOYMENT_COPY = "This account is on Rooq's old testnet deployment, which this version of the site can only read. Nothing was sent.";
 
 const describe = (reason: string, fallback: string): string => REASON_COPY[reason] ?? fallback;
 
@@ -96,8 +106,9 @@ export class Engine {
   decoded: Decoded | null = null;
   ops: OpRecord[] = [];
   private readonly running = new Set<string>();
-  private reservedDeposits = new Set<number>();
+  private deposits = new DepositReservations(DEPOSIT_GAP);
   private lastSyncError: string | null = null;
+  private foldedRatiosDue = 0;
   view: PrivateView | null = null;
   private stopped = false;
 
@@ -107,7 +118,13 @@ export class Engine {
     private readonly address: string,
     private readonly persist: (ops: readonly unknown[]) => void,
     private readonly emit: (view: PrivateView | null, ops: readonly PrivateOp[]) => void,
+    private readonly persistDeposits: (reservations: readonly DepositReservation[]) => Promise<void>,
   ) {}
+
+  /** Reservations stored by an earlier session, so a reload can't hand a pending shield's index out again. */
+  restoreDeposits(stored: readonly DepositReservation[]): void {
+    this.deposits = new DepositReservations(DEPOSIT_GAP, stored);
+  }
 
   publicOps(): PrivateOp[] {
     return this.ops.map((o) => {
@@ -150,13 +167,14 @@ export class Engine {
     try {
       await this.chain.sync();
       this.decoded = this.scanner.decode(this.chain);
-      for (const k of this.reservedDeposits) if (k < this.decoded.nextDeposit) this.reservedDeposits.delete(k);
+      if (await this.deposits.settle(this.decoded.nextDeposit, (hash) => this.shieldReceipt(hash))) await this.persistDeposits(this.deposits.list());
       this.lastSyncError = null;
       this.view = buildView(this.chain, this.decoded, this.address, { error: null });
-      await this.refreshClaims();
+      await this.syncFoldedRatios();
+      this.refreshClaims();
       this.settleWaiting();
     } catch (error) {
-      this.lastSyncError = error instanceof ServiceDown ? error.service === "rpc" ? "NETWORK_UNREACHABLE" : error.detail === "ROOT_MISMATCH" ? "ROOT_MISMATCH" : `${error.service.toUpperCase()}_UNAVAILABLE` : "SYNC_FAILED";
+      this.lastSyncError = error instanceof ServiceDown ? error.service === "rpc" ? "NETWORK_UNREACHABLE" : error.detail === "ROOT_MISMATCH" || error.detail === DEPLOYMENT_MISMATCH || error.detail === CHAIN_MISMATCH ? error.detail : `${error.service.toUpperCase()}_UNAVAILABLE` : "SYNC_FAILED";
       console.warn("rooq: sync failed", error);
       if (this.view) {
         this.view = { ...this.view, sync: { ...this.view.sync, error: this.lastSyncError }, health: { readApi: this.lastSyncError !== "READ_UNAVAILABLE", relayer: this.lastSyncError !== "RELAYER_UNAVAILABLE", rpc: this.lastSyncError !== "NETWORK_UNREACHABLE" } };
@@ -167,15 +185,29 @@ export class Engine {
     this.publish();
   }
 
-  private async refreshClaims(): Promise<void> {
+  /** On the fixed cadence, for every open account. A v1 deployment has no claims to redeem, for anyone. */
+  private async syncFoldedRatios(): Promise<void> {
+    const now = Date.now();
+    if (this.decoded?.legacy || now < this.foldedRatiosDue) return;
+    this.foldedRatiosDue = now + FOLDED_RATIOS_EVERY_MS;
+    try {
+      await this.chain.syncFoldedRatios();
+    } catch (error) {
+      if (!(error instanceof ServiceDown)) throw error;
+      // Claims stay waiting until the next read; the rest of the account doesn't depend on it.
+      console.warn("rooq: claim ratios not read", error);
+    }
+  }
+
+  private refreshClaims(): void {
     if (!this.view || !this.decoded) return;
-    const claims = await Promise.all(this.view.claims.map(async (c) => {
+    const claims = this.view.claims.map((c) => {
       if (c.status !== "waiting") return c;
       const held = this.decoded!.claims.find((x) => toHex32(x.commitment) === c.id);
       if (!held) return c;
-      const ratio = await this.chain.foldedRatio(toHex32(held.record.deltaCm));
+      const ratio = this.chain.foldedRatio(toHex32(held.record.deltaCm));
       return ratio === null ? c : { ...c, status: "redeemable" as const, ratio };
-    }));
+    });
     this.view = { ...this.view, claims };
   }
 
@@ -189,19 +221,50 @@ export class Engine {
 
   // ---------- deposits
 
-  prepareShield(): { inner: Hex; depositIndex: number } {
+  /** The index is stored before the wallet signs, so neither a reload nor an unconfirmed shield can free it early. */
+  async prepareShield(): Promise<{ inner: Hex; depositIndex: number }> {
     if (!this.decoded) throw new Named("NOT_SYNCED", "Your private account hasn't finished reading the chain yet.");
-    let k = this.decoded.nextDeposit;
-    while (this.reservedDeposits.has(k)) k++;
-    this.reservedDeposits.add(k);
-    const { rho, blind } = depositOpening(this.scanner.seed, k);
-    return { inner: toHex32(noteInner(this.scanner.main.owner, rho, blind)), depositIndex: k };
+    if (this.lastSyncError === DEPLOYMENT_MISMATCH) throw new Named(DEPLOYMENT_MISMATCH, "The private read service named different Rooq contracts than this site trusts, so shielding is blocked.", false);
+    if (this.decoded.legacy) throw new Named("OLD_DEPLOYMENT", "Rooq is moving to a new testnet deployment, so moving money into the old one is paused.", false);
+    const deployment = this.chain.deployment;
+    if (!deployment) throw new Named("NOT_SYNCED", "Your private account hasn't finished reading the chain yet.");
+    // The same derivation the scanner finds deposits with, so the usedInner check and the deposit name the same opening.
+    const innerAt = (k: number): Hex => {
+      const { rho, blind } = this.scanner.depositOpening(k, deployment.id);
+      return toHex32(noteInner(this.scanner.main.owner, rho, blind));
+    };
+    // A shield from another tab or device, or one the read API hasn't indexed, already used an index the scanner thinks
+    // is free. The pool refuses a reused opening (InnerReused), so move past it before the wallet signs.
+    const k = await reserveUnused(this.deposits, this.decoded.nextDeposit, (i) => this.chain.innerUsed(innerAt(i)));
+    if (k === null) throw new Named("SHIELDS_PENDING", "Too many earlier shields from this account haven't reached the chain yet. Wait for them to land, then try again.");
+    try {
+      await this.persistDeposits(this.deposits.list());
+    } catch (error) {
+      this.deposits.finished(k);
+      throw new Named("STORAGE_UNAVAILABLE", `This browser couldn't store the deposit before signing, so nothing was sent. ${error instanceof Error ? error.message : ""}`.trim());
+    }
+    return { inner: innerAt(k), depositIndex: k };
   }
 
-  /** A sent deposit keeps its index reserved until the chain shows it, so a second shield can't reuse the opening. */
-  shieldFinished(k: number, ok: boolean): void {
-    if (!ok) this.reservedDeposits.delete(k);
+  async shieldSent(k: number, hash: Hex): Promise<void> {
+    this.deposits.sent(k, hash);
+    await this.persistDeposits(this.deposits.list());
+  }
+
+  /** Only a shield that never left the wallet gives its index back. The rest wait for the chain (shieldReceipt). */
+  async shieldFinished(k: number): Promise<void> {
+    this.deposits.finished(k);
+    await this.persistDeposits(this.deposits.list());
     void this.syncOnce();
+  }
+
+  private async shieldReceipt(hash: Hex): Promise<ReceiptStatus> {
+    try {
+      return (await this.chain.receipt(hash))?.status ?? null;
+    } catch (error) {
+      if (!(error instanceof ServiceDown)) throw error;
+      return null;
+    }
   }
 
   // ---------- operations
@@ -551,15 +614,26 @@ export class Engine {
     throw new Named("INSUFFICIENT_PRIVATE_BALANCE", "Your private balance doesn't cover this.", false);
   }
 
-  private lockExpiry(op: OpRecord, seconds: bigint): bigint {
-    if (op.data.expiryAt === undefined) op.data.expiryAt = (this.chain.chainNow ?? 0n) + seconds;
+  /** Fixed at first prepare so a retry keeps its terms, and never past what the lock circuit allows from `asOf`. */
+  private lockExpiry(op: OpRecord, seconds: bigint, asOf: bigint, maker: boolean): bigint {
+    const cap = asOf + (maker ? MAX_MAKER_LIFETIME : MAX_INTENT_LIFETIME);
+    const wanted = op.data.expiryAt ?? asOf + seconds;
+    op.data.expiryAt = wanted > cap ? cap : wanted;
     return op.data.expiryAt;
   }
 
-  private async buildLock(note: readonly HeldNote[], asset: Hex, amount: bigint, terms: LockTerms, expiry: bigint, payoutIndex: number) {
+  /**
+   * The relayer takes no fee on testnet, so every relayed action carries a zero fee note to the wallet's own address,
+   * which looks the same on chain as a paid one.
+   */
+  private async buildLock(note: readonly HeldNote[], asset: Hex, amount: bigint, terms: LockTerms, expiry: bigint, payoutIndex: number, asOf: bigint) {
     const dep = this.chain.deployment!;
     const { coordinator, riskKeys } = await this.chain.readOperatorKeys();
-    return lockWitness({ keys: note[0]!.keys, deployment: dep.id, tree: this.chain.tree, asset: BigInt(asset), inputs: note, amount, terms, expiry, coordinator, riskKeys, payout: addressOf(this.scanner.address(payoutIndex)), view: this.scanner.main.pk });
+    const keys = note[0]!.keys;
+    return lockWitness({
+      keys, deployment: dep.id, tree: this.chain.tree, asset: BigInt(asset), inputs: note, amount, terms, expiry, coordinator, riskKeys, payout: addressOf(this.scanner.address(payoutIndex)), view: this.scanner.main.pk, asOf,
+      relayFee: zeroRelayFee(addressOf(keys)),
+    });
   }
 
   private async proveTo(id: string, action: string, circuit: WalletCircuit, inputs: InputMap, publicInputs: unknown, index: number): Promise<Part> {
@@ -569,6 +643,13 @@ export class Engine {
     const p: Proof = await prove(circuit, inputs);
     console.info(`rooq: ${circuit} proved in ${Math.round(performance.now() - t0)} ms`);
     return { action, jobId: null, done: false, tx: null, body: JSON.stringify({ proof: bytesToHex(p.proof), publicInputs }, (_k, v: unknown) => (typeof v === "bigint" ? v.toString() : v)) };
+  }
+
+  /** Both LP locks in one relayed `lockPair` call, so they land at adjacent leaves and nothing can sit between them. */
+  private async provePair(id: string, a: { inputs: InputMap; publicInputs: unknown }, b: { inputs: InputMap; publicInputs: unknown }): Promise<Part> {
+    const first = JSON.parse((await this.proveTo(id, "lockPair", "lock", a.inputs, a.publicInputs, 0)).body) as { proof: Hex; publicInputs: unknown };
+    const second = JSON.parse((await this.proveTo(id, "lockPair", "lock", b.inputs, b.publicInputs, 1)).body) as { proof: Hex; publicInputs: unknown };
+    return { action: "lockPair", jobId: null, done: false, tx: null, body: JSON.stringify({ proof: [first.proof, second.proof], publicInputs: [first.publicInputs, second.publicInputs] }) };
   }
 
   private position(id: string): HeldPosition {
@@ -591,6 +672,7 @@ export class Engine {
   private async prepare(id: string): Promise<void> {
     const op = this.ops.find((o) => o.id === id)!;
     const i = op.intent;
+    if (this.decoded!.legacy) throw new Named("OLD_DEPLOYMENT", OLD_DEPLOYMENT_COPY, false);
     const dep = this.chain.deployment!;
     const tree = this.chain.tree;
     const main = this.scanner.main;
@@ -647,9 +729,10 @@ export class Engine {
         const notes = this.selectOrThrow(id, m.collateral, amount);
         reserve(notes);
         op.data.payoutIndex ??= this.nextPayout(id);
-        const expiry = this.lockExpiry(op, i.expiry);
+        const asOf = await this.chain.latestBlockTime();
         const terms = i.t === "perpOpen" ? takerTerms(i.market, i.isShort, i.size, i.limit) : makerTerms(i.market, i.spreadBps, i.maxSize, i.closeSpreadBps);
-        const w = await this.buildLock(notes, m.collateral, amount, terms, expiry, op.data.payoutIndex);
+        const expiry = this.lockExpiry(op, i.expiry, asOf, terms.role === ROLE_MAKER);
+        const w = await this.buildLock(notes, m.collateral, amount, terms, expiry, op.data.payoutIndex, asOf);
         parts.push(await this.proveTo(id, "lock", "lock", w.inputs, w.publicInputs, 0));
         op.data.lockIds = [toHex32(lockCommitment(dep.id, w.record))];
         break;
@@ -658,8 +741,9 @@ export class Engine {
         const notes = this.selectOrThrow(id, i.assetIn, i.amountIn);
         reserve(notes);
         op.data.payoutIndex ??= this.nextPayout(id);
-        const expiry = this.lockExpiry(op, i.expiry);
-        const w = await this.buildLock(notes, i.assetIn, i.amountIn, swapTerms(i.pool, i.minOut, i.secondPool), expiry, op.data.payoutIndex);
+        const asOf = await this.chain.latestBlockTime();
+        const expiry = this.lockExpiry(op, i.expiry, asOf, false);
+        const w = await this.buildLock(notes, i.assetIn, i.amountIn, swapTerms(i.pool, i.minOut, i.secondPool), expiry, op.data.payoutIndex, asOf);
         parts.push(await this.proveTo(id, "lock", "lock", w.inputs, w.publicInputs, 0));
         op.data.lockIds = [toHex32(lockCommitment(dep.id, w.record))];
         break;
@@ -672,11 +756,12 @@ export class Engine {
         reserve(n1);
         op.data.payoutIndex ??= this.nextPayout(id);
         op.data.link ??= randomField();
-        const expiry = this.lockExpiry(op, i.expiry);
-        const a = await this.buildLock(n0, pool.token0, i.amount0, lpTerms(i.pool, 0n, i.minShares, op.data.link), expiry, op.data.payoutIndex);
-        const b = await this.buildLock(n1, pool.token1, i.amount1, lpTerms(i.pool, 1n, i.minShares, op.data.link), expiry, op.data.payoutIndex);
-        parts.push(await this.proveTo(id, "lock", "lock", a.inputs, a.publicInputs, 0));
-        parts.push(await this.proveTo(id, "lock", "lock", b.inputs, b.publicInputs, 1));
+        const asOf = await this.chain.latestBlockTime();
+        const expiry = this.lockExpiry(op, i.expiry, asOf, false);
+        const [terms0, terms1] = lpBandTerms(i.pool, op.data.link, i.priceLo, i.priceHi);
+        const a = await this.buildLock(n0, pool.token0, i.amount0, terms0, expiry, op.data.payoutIndex, asOf);
+        const b = await this.buildLock(n1, pool.token1, i.amount1, terms1, expiry, op.data.payoutIndex, asOf);
+        parts.push(await this.provePair(id, a, b));
         op.data.lockIds = [toHex32(lockCommitment(dep.id, a.record)), toHex32(lockCommitment(dep.id, b.record))];
         break;
       }
@@ -695,13 +780,17 @@ export class Engine {
         const m = this.market(last.pair.market);
         const actor = pos.side === "taker" ? ACTOR_TAKER : ACTOR_MAKER;
         if ((i.remove > 0n || i.reduce > 0n) && m.mark === null) throw new Named("ORACLE_STALE", describe("ORACLE_STALE", ""), true);
+        const asOf = await this.chain.latestBlockTime();
+        const matureAt = this.chain.exits.get(toHex32(last.nullifier));
+        if (matureAt !== undefined && asOf >= matureAt) throw new Named("EXIT_MATURED", describe("EXIT_MATURED", ""), false);
         const note = i.add > 0n ? this.selectOrThrow(id, m.collateral, i.add).find((n) => n.value >= i.add) : undefined;
         if (i.add > 0n && !note) throw new Named("FRAGMENTED", "Adding margin needs one note large enough. Combine notes in Funds, then try again.", false);
         if (note) reserve([note]);
         const { riskKeys } = await this.chain.readOperatorKeys();
+        const noteOwner = note?.keys ?? main;
         const w = updateWitness({
-          pair: last.pair, leafIndex: last.leafIndex, deployment: dep.id, tree, update: { actor, add: i.add, remove: i.remove, reduce: i.reduce }, sk: pos.keys.sk, noteOwner: note?.keys ?? main, note, mark: m.mark ?? 0n, imrWad: m.imrWad, scale: m.scale,
-          feeBps: m.takerFeeBps, fundingIndex: m.fundingIndex, riskKeys, feeTo: dep.feeTo, carryExit: this.chain.exits.has(toHex32(last.nullifier)),
+          pair: last.pair, leafIndex: last.leafIndex, deployment: dep.id, tree, update: { actor, add: i.add, remove: i.remove, reduce: i.reduce }, sk: pos.keys.sk, noteOwner, note, mark: m.mark ?? 0n, imrWad: m.imrWad, mmrWad: m.mmrWad, scale: m.scale,
+          feeBps: m.takerFeeBps, fundingIndex: m.fundingIndex, riskKeys, feeTo: dep.feeTo, carryExit: matureAt !== undefined, asOf, relayFee: zeroRelayFee(addressOf(noteOwner)),
         });
         if (w.outcome.refused) throw new Named("POSITION_REFUSED", refusalCopy(w.outcome.refused), false);
         parts.push(await this.proveTo(id, "updatePair", "pair_update", w.inputs, w.publicInputs, 0));
@@ -727,7 +816,8 @@ export class Engine {
         const held = this.decoded!.claims.find((c) => toHex32(c.commitment) === i.claim);
         if (!held) throw new Named("UNKNOWN_CLAIM", "This claim wasn't found in your account.", false);
         this.requireInTree(held.leafIndex);
-        const ratio = await this.chain.foldedRatio(toHex32(held.record.deltaCm));
+        await this.chain.syncFoldedRatios();
+        const ratio = this.chain.foldedRatio(toHex32(held.record.deltaCm));
         if (ratio === null) throw new Named("CLAIM_NOT_FOLDED", "This claim's funding epoch hasn't run yet.", true);
         const w = redeemWitness({ claim: held.record, leafIndex: held.leafIndex, deployment: dep.id, tree, ratio });
         parts.push(await this.proveTo(id, "redeemClaim", "redeem_claim", w.inputs, w.publicInputs, 0));
@@ -741,7 +831,7 @@ export class Engine {
         const operator = await this.chain.readOperatorKeys();
         const keys = [operator.coordinator, operator.riskKeys[0], operator.riskKeys[1]] as const;
         const opening = i.t === "lpRequest";
-        const w = lpSetWitness({ claim: held.record, leafIndex: held.leafIndex, deployment: dep.id, tree, mode: opening ? 0n : 1n, sk: opening ? held.keys.sk : 0n, min0: opening ? i.min0 : 0n, min1: opening ? i.min1 : 0n, expiry: opening ? now + i.expiry : 0n, asOf: now, keys });
+        const w = lpSetWitness({ claim: held.record, leafIndex: held.leafIndex, deployment: dep.id, tree, mode: opening ? 0n : 1n, sk: opening ? held.keys.sk : 0n, priceLo: opening ? i.priceLo : 0n, priceHi: opening ? i.priceHi : 0n, expiry: opening ? now + i.expiry : 0n, asOf: now, keys });
         parts.push(await this.proveTo(id, "setLiquidityRequest", "lp_set", w.inputs, w.publicInputs, 0));
         break;
       }
@@ -763,6 +853,9 @@ function refusalCopy(refused: string): string {
   if (refused === "underwater pair cannot reduce") return "This position can't reduce while it is underwater. Add margin or wait for liquidation.";
   if (refused === "removal above margin") return "That's more margin than this position holds.";
   if (refused === "below initial margin") return "Removing that much would leave this position below its initial margin.";
+  if (refused === "update cooldown") return "This position changed less than 10 minutes ago. Inside that window only a top-up that brings it back to initial margin can run.";
+  if (refused === "cure must reach initial margin") return "Inside the 10 minute window a top-up has to bring this position back to initial margin. Add more, or wait for the window to pass.";
+  if (refused === "update leaves pair liquidatable") return "This change would leave the position below maintenance margin, where it can be liquidated.";
   return refused;
 }
 
