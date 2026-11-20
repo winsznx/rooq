@@ -1,6 +1,6 @@
-import { NOTE_PT_LEN, T_ENC } from "./constants";
-import { hash, isOnCurve, mul, mulGenerator, type Point } from "./crypto";
-import { mod } from "./field";
+import { NOTE_PT_LEN, T_ENC } from "./constants.js";
+import { hash, isOnCurve, mul, mulGenerator, type Point } from "./crypto.js";
+import { mod } from "./field.js";
 
 /** [eph.x, eph.y, pt_i + H(T_ENC, shared.x, i)...], identical to `encrypt` in the circuits. */
 export function encrypt(pt: readonly bigint[], pk: Point, eph: bigint): bigint[] {

@@ -2,14 +2,14 @@ import {
   ACTOR_MAKER, ACTOR_NONE, ACTOR_TAKER, AMOUNT_LIMIT, BPS, CLAIM_PT_LEN, CLOSE_MATURED, CLOSE_TAKER, FREE_DOMAIN, LOCK_PT_LEN, MAX_INTENT_LIFETIME, MAX_MAKER_LIFETIME, MIN_UPDATE_GAP, OI_BATCH, OI_CLOSE, OI_OPEN,
   OI_REDUCE, PAIR_PT_LEN, RECORD_VERSION, RELAY_RHO_CLOSE, RELAY_RHO_LOCK, RELAY_RHO_REDEEM, RELAY_RHO_RELEASE, RELAY_RHO_UPDATE, ROLE_MAKER, ROLE_TAKER, T_AUTH, T_CLAIM, T_LOCK, T_MARKET,
   T_NF_REC, T_NONCE, T_OI, T_OWNER, T_PAIR, T_TERMS, TAKER_GRACE, WAD,
-} from "./constants";
-import { hash, type Point } from "./crypto";
-import { decrypt, encrypt } from "./encryption";
-import { randomField, toHex32, type Hex } from "./field";
-import { addressOf, ownerTag, type PrivateAddress, type WalletKeys } from "./keys";
-import { noteCommitment, noteInner, outputRho, ownerNullifier, type OwnedNote } from "./note";
-import type { MerkleTree } from "./tree";
-import type { InputMap, InputValue } from "./witness";
+} from "./constants.js";
+import { hash, type Point } from "./crypto.js";
+import { decrypt, encrypt } from "./encryption.js";
+import { randomField, toHex32, type Hex } from "./field.js";
+import { addressOf, ownerTag, type PrivateAddress, type WalletKeys } from "./keys.js";
+import { noteCommitment, noteInner, outputRho, ownerNullifier, type OwnedNote } from "./note.js";
+import type { MerkleTree } from "./tree.js";
+import type { InputMap, InputValue } from "./witness.js";
 
 const f = (x: bigint): string => toHex32(x);
 

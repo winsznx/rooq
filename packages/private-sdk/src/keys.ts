@@ -1,5 +1,5 @@
-import { T_AUTH, T_NK, T_OWNER, T_SEED } from "./constants";
-import { hash, mulGenerator, type Point } from "./crypto";
+import { T_AUTH, T_NK, T_OWNER, T_SEED } from "./constants.js";
+import { hash, mulGenerator, type Point } from "./crypto.js";
 
 /**
  * Wallet credentials (ADR-P01 key table). `sk` authorizes spends and must never leave the device.

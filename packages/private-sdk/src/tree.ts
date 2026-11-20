@@ -1,5 +1,5 @@
-import { T_NODE, TREE_DEPTH } from "./constants";
-import { hash } from "./crypto";
+import { T_NODE, TREE_DEPTH } from "./constants.js";
+import { hash } from "./crypto.js";
 
 /** Append-only Poseidon2 Merkle tree mirroring the on-chain root (ADR-P02 section 3). */
 export class MerkleTree {
