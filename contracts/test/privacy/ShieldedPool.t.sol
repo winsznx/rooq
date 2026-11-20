@@ -7,6 +7,7 @@ import {MockERC20} from "../../src/tokens/MockERC20.sol";
 import {AppendVerifier} from "../../src/privacy/verifiers/AppendVerifier.sol";
 import {SpendVerifier} from "../../src/privacy/verifiers/SpendVerifier.sol";
 import {ShieldedPool, IHonkVerifier} from "../../src/privacy/ShieldedPool.sol";
+import {AcceptAllVerifier, InputBoundVerifier} from "../utils/MockVerifiers.sol";
 
 /// Takes 1% of every transfer, so the pool receives less than the caller claims.
 contract FeeOnTransferToken is ERC20 {
@@ -99,14 +100,14 @@ contract ShieldedPoolTest is Test {
 
     function test_processQueueWithNothingQueuedReverts() public {
         vm.expectRevert(ShieldedPool.NothingQueued.selector);
-        pool.processQueue("", bytes32(0));
+        pool.processQueue("", bytes32(0), 1);
     }
 
     function test_processQueueRejectsGarbageProof() public {
         vm.prank(alice);
         pool.shield(address(usd), 1e6, bytes32(uint256(7)));
         vm.expectRevert();
-        pool.processQueue(new bytes(9000), bytes32(uint256(1)));
+        pool.processQueue(new bytes(9000), bytes32(uint256(1)), 1);
         assertEq(pool.processed(), 0);
         assertEq(pool.root(), pool.EMPTY_ROOT());
     }
@@ -128,8 +129,164 @@ contract ShieldedPoolTest is Test {
         assertFalse(pool.nullifierSpent(bytes32(uint256(1))));
     }
 
-    /// Root expiry after ROOT_HISTORY batches needs 64 proven appends and is not covered here yet.
     function test_unrecordedRootIsUnknown() public view {
         assertFalse(pool.isKnownRoot(bytes32(uint256(99))));
+    }
+
+    function test_shieldRejectsReusedInner() public {
+        vm.startPrank(alice);
+        pool.shield(address(usd), 1e6, bytes32(uint256(42)));
+        vm.expectRevert(abi.encodeWithSelector(ShieldedPool.InnerReused.selector, bytes32(uint256(42))));
+        pool.shield(address(usd), 1e6, bytes32(uint256(42)));
+        vm.stopPrank();
+        assertEq(pool.queueLength(), 1);
+    }
+
+    /// Reuse links two deposits publicly whatever they carry, so asset and amount do not matter.
+    function test_shieldRejectsReusedInnerAcrossAssetsAndAmounts() public {
+        vm.prank(alice);
+        pool.shield(address(usd), 1e6, bytes32(uint256(42)));
+        vm.expectRevert(abi.encodeWithSelector(ShieldedPool.InnerReused.selector, bytes32(uint256(42))));
+        vm.prank(alice);
+        pool.shield(address(usd), 2e6, bytes32(uint256(42)));
+        fot.approve(address(pool), type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(ShieldedPool.InnerReused.selector, bytes32(uint256(42))));
+        pool.shield(address(fot), 1e18, bytes32(uint256(42)));
+    }
+
+    function test_innerNotMarkedWhenShieldReverts() public {
+        fot.approve(address(pool), type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(ShieldedPool.TransferAmountMismatch.selector, 100e18, 99e18));
+        pool.shield(address(fot), 100e18, bytes32(uint256(5)));
+        assertFalse(pool.usedInner(bytes32(uint256(5))));
+        vm.prank(alice);
+        pool.shield(address(usd), 1e6, bytes32(uint256(5)));
+        assertTrue(pool.usedInner(bytes32(uint256(5))));
+    }
+
+    /// Indexers and wallets read these; any change to a leaf event or the root sequence breaks every scanner.
+    function test_leafEventsAndRootSequenceArePinned() public view {
+        assertEq(ShieldedPool.Shielded.selector, keccak256("Shielded(uint256,address,uint256,bytes32,address)"));
+        assertEq(ShieldedPool.NotesCreated.selector, keccak256("NotesCreated(uint256,bytes32[3],bytes32[7][3])"));
+        assertEq(ShieldedPool.RootUpdated.selector, keccak256("RootUpdated(bytes32,uint256,uint256,uint256)"));
+        assertEq(pool.queueEntry.selector, bytes4(keccak256("queueEntry(uint256)")));
+        assertEq(pool.rootSeqOf.selector, bytes4(keccak256("rootSeqOf(bytes32)")));
+    }
+}
+
+/// processQueue with stand-in append verifiers, so the count rules and root bookkeeping run without a prover.
+contract ShieldedPoolQueueTest is Test {
+    ShieldedPool internal pool;
+    MockERC20 internal usd;
+    InputBoundVerifier internal pinned;
+    address internal alice = makeAddr("alice");
+    uint256 internal nextInner = 1;
+
+    function setUp() public {
+        usd = new MockERC20("Test USDG", "tUSDG", 6, type(uint256).max);
+        pinned = new InputBoundVerifier();
+        pool = _pool(IHonkVerifier(address(new AcceptAllVerifier())));
+    }
+
+    function _pool(IHonkVerifier append) internal returns (ShieldedPool p) {
+        address[] memory assets = new address[](1);
+        assets[0] = address(usd);
+        p = new ShieldedPool(append, IHonkVerifier(address(new AcceptAllVerifier())), assets);
+        usd.mintTo(alice, 1_000_000e6);
+        vm.prank(alice);
+        usd.approve(address(p), type(uint256).max);
+    }
+
+    function _shield(ShieldedPool p, uint256 n) internal {
+        for (uint256 i; i < n; i++) {
+            vm.prank(alice);
+            p.shield(address(usd), 1e6, bytes32(nextInner++));
+        }
+    }
+
+    /// The vector a prover commits to for the next `count` entries, built the way processQueue builds it.
+    function _inputs(ShieldedPool p, bytes32 newRoot, uint256 count) internal view returns (bytes32[] memory inputs) {
+        uint256 batch = p.APPEND_BATCH();
+        uint256 start = p.processed();
+        inputs = new bytes32[](4 + 4 * batch);
+        inputs[0] = bytes32(p.deploymentId());
+        inputs[1] = p.root();
+        inputs[2] = newRoot;
+        inputs[3] = bytes32(start);
+        for (uint256 i; i < count; i++) {
+            ShieldedPool.Entry memory e = p.queueEntry(start + i);
+            inputs[4 + i] = bytes32(uint256(e.kind));
+            inputs[4 + batch + i] = e.a;
+            inputs[4 + 2 * batch + i] = e.b;
+            inputs[4 + 3 * batch + i] = e.c;
+        }
+    }
+
+    function test_processQueueRejectsZeroCount() public {
+        _shield(pool, 2);
+        vm.expectRevert(abi.encodeWithSelector(ShieldedPool.BadCount.selector, 0, 2));
+        pool.processQueue("", bytes32(uint256(1)), 0);
+    }
+
+    function test_processQueueRejectsCountAbovePending() public {
+        _shield(pool, 2);
+        vm.expectRevert(abi.encodeWithSelector(ShieldedPool.BadCount.selector, 3, 2));
+        pool.processQueue("", bytes32(uint256(1)), 3);
+    }
+
+    function test_processQueueRejectsCountAboveBatch() public {
+        _shield(pool, 9);
+        vm.expectRevert(abi.encodeWithSelector(ShieldedPool.BadCount.selector, 9, 9));
+        pool.processQueue("", bytes32(uint256(1)), 9);
+    }
+
+    function test_partialBatchLeavesRestQueued() public {
+        _shield(pool, 5);
+        vm.expectEmit(address(pool));
+        emit ShieldedPool.RootUpdated(bytes32(uint256(1)), 2, 0, 3);
+        pool.processQueue("", bytes32(uint256(1)), 3);
+        assertEq(pool.processed(), 3);
+        assertEq(pool.queueLength(), 5);
+        pool.processQueue("", bytes32(uint256(2)), 2);
+        assertEq(pool.processed(), 5);
+        assertEq(pool.rootSeqOf(bytes32(uint256(2))), 3);
+    }
+
+    /// Audit #19: a shield landing between proving and inclusion used to change the batch size and so the public inputs.
+    function test_laterShieldDoesNotInvalidateInFlightAppend() public {
+        ShieldedPool p = _pool(IHonkVerifier(address(pinned)));
+        _shield(p, 3);
+        bytes32 newRoot = bytes32(uint256(77));
+        pinned.bind(_inputs(p, newRoot, 3));
+        _shield(p, 1);
+        p.processQueue("", newRoot, 3);
+        assertEq(p.processed(), 3);
+        assertEq(p.root(), newRoot);
+        assertEq(p.queueLength(), 4);
+    }
+
+    function test_appendVerifierSeesOnlyTheNamedEntries() public {
+        ShieldedPool p = _pool(IHonkVerifier(address(pinned)));
+        _shield(p, 3);
+        pinned.bind(_inputs(p, bytes32(uint256(77)), 2));
+        vm.expectRevert(ShieldedPool.InvalidProof.selector);
+        p.processQueue("", bytes32(uint256(77)), 3);
+        p.processQueue("", bytes32(uint256(77)), 2);
+        assertEq(p.processed(), 2);
+    }
+
+    /// Roots age out of isKnownRoot, but rootSeqOf keeps every root's sequence for scanners that resume from an old root.
+    function test_rootSeqOfIsNeverPruned() public {
+        uint256 updates = pool.ROOT_HISTORY() + 6;
+        for (uint256 i = 1; i <= updates; i++) {
+            _shield(pool, 1);
+            pool.processQueue("", bytes32(i), 1);
+        }
+        assertFalse(pool.isKnownRoot(bytes32(uint256(1))), "old root expired from history");
+        assertFalse(pool.isKnownRoot(pool.EMPTY_ROOT()));
+        assertEq(pool.rootSeqOf(pool.EMPTY_ROOT()), 1);
+        assertEq(pool.rootSeqOf(bytes32(uint256(1))), 2);
+        assertEq(pool.rootSeqOf(bytes32(updates)), updates + 1);
+        assertEq(pool.rootSeq(), updates + 1);
     }
 }

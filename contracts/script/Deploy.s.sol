@@ -126,7 +126,7 @@ contract Deploy is Script {
         core.collateral = _eq(cc.mode, "mock")
             ? address(new MockERC20(cc.name, cc.symbol, uint8(vm.parseUint(cc.decimals)), 100_000e6))
             : vm.parseAddress(cc.token);
-        core.oracle = new OracleAdapter(core.deployer, address(0), 0);
+        core.oracle = new OracleAdapter(core.deployer, core.guardian, address(0), 0, new OracleAdapter.FeedInit[](0));
         core.vault = new MarginVault(core.collateral, core.deployer);
         core.factory = new SpotFactory(core.guardian);
         core.router = new SpotRouter(address(core.factory));

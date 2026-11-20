@@ -5,7 +5,8 @@
     "fractions": "WAD decimal strings (1e18 = 100%)",
     "usd": "WAD decimal strings (1e18 = 1 USD)",
     "collateral": "collateral token units (USDG and mUSD use 6 decimals)",
-    "bps": "basis points"
+    "bps": "basis points",
+    "maxPairSize": "largest single pair, in the market asset's base units (Stock Tokens use 18 decimals). Deploy refuses a market where it is worth more than a tenth of maxOiUsdWad at the start price"
   },
   "globalBounds": {
     "minImrWad": "333400000000000000",
@@ -14,7 +15,9 @@
     "maxTakerFeeBps": 50,
     "maxLiqPenaltyBps": 300,
     "maxDeviationBps": 300,
-    "maxFundingRatePerHourWad": "1000000000000000"
+    "maxFundingRatePerHourWad": "1000000000000000",
+    "maxCloseSpreadBps": 1000,
+    "maxPairSize": "100000000000000000000"
   },
   "tiers": [
     {
@@ -32,6 +35,8 @@
       "maxFundingRatePerHourWad": "100000000000000",
       "minMakerBacking": "5000000000",
       "minBond": "150000000",
+      "maxCloseSpreadBps": 50,
+      "maxPairSize": "500000000000000000",
       "version": 1
     },
     {
@@ -49,6 +54,8 @@
       "maxFundingRatePerHourWad": "100000000000000",
       "minMakerBacking": "2000000000",
       "minBond": "150000000",
+      "maxCloseSpreadBps": 50,
+      "maxPairSize": "10000000000000000000",
       "version": 1
     },
     {
@@ -66,6 +73,8 @@
       "maxFundingRatePerHourWad": "200000000000000",
       "minMakerBacking": "2000000000",
       "minBond": "150000000",
+      "maxCloseSpreadBps": 50,
+      "maxPairSize": "100000000000000000000",
       "version": 1
     },
     {
@@ -83,6 +92,8 @@
       "maxFundingRatePerHourWad": "100000000000000",
       "minMakerBacking": "2000000000",
       "minBond": "150000000",
+      "maxCloseSpreadBps": 50,
+      "maxPairSize": "10000000000000000000",
       "version": 1
     }
   ]

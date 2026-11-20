@@ -6,7 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IHonkVerifier, ShieldedPool} from "./ShieldedPool.sol";
 import {PairInputs} from "./PairInputs.sol";
-import {CLAIM_KEYS, CT_CLAIM, PairTypes} from "./PairTypes.sol";
+import {CLAIM_KEYS, CT_CLAIM, CT_PAIR, LOCK_MAX_INTENT_LIFETIME, LOCK_MAX_MAKER_LIFETIME, PAIR_MIN_UPDATE_GAP, PairTypes} from "./PairTypes.sol";
 
 interface IPriceSource {
     function getFreshPrice(bytes32 feedId) external view returns (uint256);
@@ -25,7 +25,7 @@ contract PrivatePairs is ShieldedPool, PairTypes {
     using SafeERC20 for IERC20;
 
     uint256 internal constant LOCK_CT_LEN = 15;
-    uint256 internal constant PAIR_CT_LEN = 22;
+    uint256 internal constant PAIR_CT_LEN = CT_PAIR;
     uint256 internal constant PAIR_RECIPIENTS = 4;
     uint256 internal constant MARKET_CT_LEN = 8;
     uint256 internal constant MARKET_CT_RECIPIENTS = 3;
@@ -44,6 +44,19 @@ contract PrivatePairs is ShieldedPool, PairTypes {
     uint256 public constant EXIT_BOND = 0.001 ether;
     /// @notice Past this with no fresh price, a matured exit may settle at the entry price (REC-05).
     uint256 internal constant ORACLE_DEAD_AFTER = 14 days;
+    /// @notice A lineage can change at most this often, except for a top-up that cures an initial-margin shortfall. It gives
+    ///         close, requestExit and liquidate a window with no update race after every update (audit #5).
+    uint256 public constant MIN_UPDATE_GAP = PAIR_MIN_UPDATE_GAP;
+    /// @notice How far an update's `asOf` may trail the block. The circuit stamps it into the record. Five minutes covers proving
+    ///         in a browser; with MIN_UPDATE_GAP at 10 minutes a lineage still gets at least 5 minutes with no update race.
+    uint256 internal constant MAX_UPDATE_SKEW = 5 minutes;
+    /// @notice How far ahead an open may stamp `asOf`, which becomes the pair's `updated_at`. Without it a coordinator could
+    ///         stamp a pair far ahead and hold off funding settlement on it.
+    uint256 internal constant MAX_OPEN_AHEAD = 10 minutes;
+    /// @notice Hard ceiling on any market's maker close spread (audit #9).
+    uint256 public constant MAX_CLOSE_SPREAD_BPS = 1_000;
+    uint256 public constant MAX_INTENT_LIFETIME = LOCK_MAX_INTENT_LIFETIME;
+    uint256 public constant MAX_MAKER_LIFETIME = LOCK_MAX_MAKER_LIFETIME;
 
     uint256 internal constant CLOSE_TAKER = 0;
     uint256 internal constant CLOSE_MATURED = 1;
@@ -74,10 +87,14 @@ contract PrivatePairs is ShieldedPool, PairTypes {
     uint256 public riskBX;
     uint256 public riskBY;
 
-    /// @notice The only contract allowed to consume records and add leaves on this tree, fixed at deployment.
+    /// @notice Consumes records and adds leaves on this tree, fixed at deployment.
     address public immutable spotModule;
-    /// @notice The only contract allowed to add markets, close them to new positions and return creator bonds.
+    /// @notice The only contract allowed to add markets, close them to new positions, rotate keys and return creator bonds.
     address public immutable marketsModule;
+    /// @notice The ModuleRegistry, the only contract that can add modules. Added modules get `moduleConsume` and
+    ///         `moduleCreate`, nothing else, and can never be removed.
+    address public immutable moduleRegistry;
+    mapping(address => bool) public isModule;
 
     mapping(uint256 => uint256) public marketBond;
     mapping(uint256 => bool) public closeOnly;
@@ -91,6 +108,11 @@ contract PrivatePairs is ShieldedPool, PairTypes {
     /// @notice Exit requests by pair nullifier. A deadline never moves once set.
     mapping(bytes32 => ExitRequest) public exitRequests;
     mapping(address => uint256) public bondBalance;
+    /// @notice Opens pushed and opens folded per market. Only opens raise open interest, so only they count toward the
+    ///         worst case an open is checked against (audit #7). Updates and closes still queue deltas for folding.
+    mapping(uint256 => uint256) public opensPushed;
+    mapping(uint256 => uint256) public opensFolded;
+    mapping(uint256 => mapping(uint256 => bool)) internal _isOpenDelta;
 
     error NotSpotModule();
     error NotModule();
@@ -104,6 +126,7 @@ contract PrivatePairs is ShieldedPool, PairTypes {
     error ExitNotCarried(bytes32 nullifier);
     error ExitAlreadyRequested(bytes32 nullifier);
     error ExitNotMature(bytes32 nullifier);
+    error ExitMatured(bytes32 nullifier);
     error OracleUnavailable(uint256 market);
     error OracleNotDead(uint256 market);
     error BadCloseMode(uint256 mode);
@@ -113,6 +136,7 @@ contract PrivatePairs is ShieldedPool, PairTypes {
 
     event RecordCreated(uint256 indexed leafIndex, uint8 indexed kind, bytes32 commitment, bytes32[] ciphertext);
     event RecordsConsumed(bytes32[] nullifiers);
+    event ModuleAdded(address indexed module);
     event PairOpened(uint256 indexed market, bytes32 commitment);
     event FundingAdvanced(
         uint256 indexed market, uint256 index, uint256 asOf, uint256 dt, uint256 mark, bytes32 head, uint256 consumed, bytes32[] ciphertext
@@ -137,7 +161,11 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         MarketConfig[] memory markets,
         Modules memory modules
     ) ShieldedPool(appendVerifier_, spendVerifier_, assets) {
-        if (coordinator.x == 0 || risk[0].x == 0 || risk[1].x == 0 || feeTo.key.x == 0) revert BadKey();
+        // Off-curve keys would make every proof that encrypts to them unsatisfiable, and the fee key can never change.
+        if (
+            !PairInputs.onCurve(coordinator.x, coordinator.y) || !PairInputs.onCurve(risk[0].x, risk[0].y)
+                || !PairInputs.onCurve(risk[1].x, risk[1].y) || !PairInputs.onCurve(feeTo.key.x, feeTo.key.y)
+        ) revert BadKey();
         if (risk[0].x == risk[1].x && risk[0].y == risk[1].y) revert BadKey();
         lockVerifier = v.lock;
         openVerifier = v.openPair;
@@ -153,6 +181,7 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         oracle = oracle_;
         spotModule = modules.spot;
         marketsModule = modules.markets;
+        moduleRegistry = modules.registry;
         coordinatorX = coordinator.x;
         coordinatorY = coordinator.y;
         riskAX = risk[0].x;
@@ -166,12 +195,17 @@ contract PrivatePairs is ShieldedPool, PairTypes {
 
     function _register(MarketConfig memory m) internal {
         if (m.id == 0 || m.id >= FIELD || !isSupported[m.asset] || _markets[m.id].asset != address(0)) revert BadMarketConfig(m.id);
-        if (m.mmrWad == 0 || m.imrWad <= m.mmrWad || m.imrWad > 1e18 || m.penaltyBps > 10_000 || m.takerFeeBps > 10_000 || m.maxPairSize == 0) {
+        if (
+            m.mmrWad == 0 || m.imrWad <= m.mmrWad || m.imrWad > 1e18 || m.penaltyBps > 10_000 || m.takerFeeBps > 10_000 || m.maxPairSize == 0
+                || m.maxCloseSpreadBps > MAX_CLOSE_SPREAD_BPS
+        ) {
             revert BadMarketConfig(m.id);
         }
         uint256 scale = 10 ** (18 - IERC20Metadata(m.asset).decimals());
-        _markets[m.id] = Market(m.asset, m.feedId, scale, m.imrWad, m.mmrWad, m.penaltyBps, m.maxFundingPerHourWad, m.takerFeeBps, m.maxOiUsdWad, m.maxPairSize);
-        _funding[m.id] = FundingState(FUNDING_INDEX_ZERO, block.timestamp, bytes32(0), 0);
+        _markets[m.id] = Market(
+            m.asset, m.feedId, scale, m.imrWad, m.mmrWad, m.penaltyBps, m.maxFundingPerHourWad, m.takerFeeBps, m.maxOiUsdWad, m.maxPairSize, m.maxCloseSpreadBps
+        );
+        _funding[m.id] = FundingState(FUNDING_INDEX_ZERO, block.timestamp, bytes32(0), 0, 0);
         lastFreshPrice[m.id] = block.timestamp;
     }
 
@@ -212,16 +246,26 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         IERC20(_markets[id].asset).safeTransfer(to, amount);
     }
 
-    /// @notice Lets the spot module share this custody and tree. Tokens never move through it.
+    function addModule(address m) external {
+        if (msg.sender != moduleRegistry) revert NotModule();
+        isModule[m] = true;
+        emit ModuleAdded(m);
+    }
+
+    /// @notice Lets modules share this custody and tree. Tokens never move through them.
     function moduleConsume(bytes32 nf) external {
-        if (msg.sender != spotModule && msg.sender != marketsModule) revert NotSpotModule();
+        _requireModule();
         _consume(_field(nf));
         _emitConsumed(nf);
     }
 
     function moduleCreate(uint8 kind, bytes32 commitment, bytes32[] calldata ciphertext) external {
-        if (msg.sender != spotModule && msg.sender != marketsModule) revert NotSpotModule();
+        _requireModule();
         _create(kind, _field(commitment), ciphertext);
+    }
+
+    function _requireModule() internal view {
+        if (msg.sender != spotModule && msg.sender != marketsModule && !isModule[msg.sender]) revert NotSpotModule();
     }
 
     function market(uint256 id) external view returns (Market memory) {
@@ -238,6 +282,10 @@ contract PrivatePairs is ShieldedPool, PairTypes {
 
     function oiDelta(uint256 id, uint256 i) external view returns (bytes32) {
         return _oiDeltas[id][i];
+    }
+
+    function pendingOpens(uint256 id) external view returns (uint256) {
+        return opensPushed[id] - opensFolded[id];
     }
 
     /// @notice Folds the oldest pending open-interest changes and accrues this epoch's funding. Anyone may submit.
@@ -265,7 +313,13 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         for (uint256 i; i < count; i++) deltas[i] = _oiDeltas[p.market][st.consumed + i];
         _verifyEpoch(proof, p, m, deltas, dt, mark);
 
-        for (uint256 i; i < count; i++) foldedRatioPlusOne[deltas[i]] = p.claimRatio + 1;
+        uint256 folded;
+        for (uint256 i; i < count; i++) {
+            foldedRatioPlusOne[deltas[i]] = p.claimRatio + 1;
+            if (_isOpenDelta[p.market][st.consumed + i]) folded++;
+        }
+        opensFolded[p.market] += folded;
+        st.bondUsed = p.bondUsedNext;
         st.index = p.indexNeg == 0 ? st.index + p.indexMag : st.index - p.indexMag;
         st.lastEpoch = p.asOf;
         st.head = p.newHead;
@@ -280,26 +334,47 @@ contract PrivatePairs is ShieldedPool, PairTypes {
 
     /// @notice Escrows FREE notes into a LOCK carrying trade terms. Proved by the owner's wallet.
     function lock(bytes calldata proof, LockPublic calldata p) external nonReentrant {
+        Keys memory k = _keys();
+        _verifyLock(proof, p, k);
+        _emitConsumed2(p.nullifiers);
+        _create(RECORD_FREE, p.changeCommitment, _copy(p.changeCt));
+        _createFee(p.relayFee);
+        _create(RECORD_LOCK, p.lockCommitment, _lockCt(p));
+    }
+
+    /// @notice Two owner-proved locks in one call, for an LP add. Every FREE output comes first and both locks last, so lock1
+    ///         sits at lock0's leaf + 1 and no other intent can land between them (lp_add asserts that gap).
+    function lockPair(bytes calldata proof0, LockPublic calldata p0, bytes calldata proof1, LockPublic calldata p1) external nonReentrant {
+        Keys memory k = _keys();
+        _verifyLock(proof0, p0, k);
+        _verifyLock(proof1, p1, k);
+        _emitConsumed2(p0.nullifiers);
+        _emitConsumed2(p1.nullifiers);
+        _create(RECORD_FREE, p0.changeCommitment, _copy(p0.changeCt));
+        _create(RECORD_FREE, p1.changeCommitment, _copy(p1.changeCt));
+        _createFee(p0.relayFee);
+        _createFee(p1.relayFee);
+        _create(RECORD_LOCK, p0.lockCommitment, _lockCt(p0));
+        _create(RECORD_LOCK, p1.lockCommitment, _lockCt(p1));
+    }
+
+    /// @dev An older `asOf` only shortens the expiry the circuit allows, so only a future one is refused.
+    function _verifyLock(bytes calldata proof, LockPublic calldata p, Keys memory k) internal {
+        if (p.asOf > block.timestamp) revert StaleAsOf(p.asOf, block.timestamp);
         _requireRoot(p.root);
         _consume(p.nullifiers[0]);
         _consume(p.nullifiers[1]);
+        if (!lockVerifier.verify(proof, PairInputs.lock(p, k))) revert InvalidProof();
+    }
 
-        if (!lockVerifier.verify(proof, PairInputs.lock(p, _keys()))) revert InvalidProof();
-
-        bytes32[] memory nfs = new bytes32[](2);
-        nfs[0] = p.nullifiers[0];
-        nfs[1] = p.nullifiers[1];
-        emit RecordsConsumed(nfs);
-        _create(RECORD_FREE, p.changeCommitment, _copy(p.changeCt));
-
-        bytes32[] memory lockCt = new bytes32[](4 * LOCK_CT_LEN);
+    function _lockCt(LockPublic calldata p) internal pure returns (bytes32[] memory ct) {
+        ct = new bytes32[](4 * LOCK_CT_LEN);
         for (uint256 i; i < LOCK_CT_LEN; i++) {
-            lockCt[i] = p.ownerCt[i];
-            lockCt[LOCK_CT_LEN + i] = p.coordinatorCt[i];
-            lockCt[2 * LOCK_CT_LEN + i] = p.riskCt[0][i];
-            lockCt[3 * LOCK_CT_LEN + i] = p.riskCt[1][i];
+            ct[i] = p.ownerCt[i];
+            ct[LOCK_CT_LEN + i] = p.coordinatorCt[i];
+            ct[2 * LOCK_CT_LEN + i] = p.riskCt[0][i];
+            ct[3 * LOCK_CT_LEN + i] = p.riskCt[1][i];
         }
-        _create(RECORD_LOCK, p.lockCommitment, lockCt);
     }
 
     /// @notice Refunds an expired lock to its committed owner.
@@ -312,12 +387,13 @@ contract PrivatePairs is ShieldedPool, PairTypes {
 
         _emitConsumed(p.nullifier);
         _create(RECORD_FREE, p.commitment, _copy(p.ciphertext));
+        _createFee(p.relayFee);
     }
 
     /// @notice Matches two locks into a pair at the current oracle mark. `asOf` must not be in the past, so a
     ///         lock is never consumed after its expiry.
     function openPair(bytes calldata proof, OpenPublic calldata p) external nonReentrant {
-        if (p.asOf < block.timestamp) revert StaleAsOf(p.asOf, block.timestamp);
+        if (p.asOf < block.timestamp || p.asOf > block.timestamp + MAX_OPEN_AHEAD) revert StaleAsOf(p.asOf, block.timestamp);
         Market memory m = _market(p.market);
         FundingState storage st = _funding[p.market];
         if (closeOnly[p.market]) revert MarketCloseOnly(p.market);
@@ -327,15 +403,13 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         _consume(p.nullifiers[1]);
         uint256 mark = oracle.getFreshPrice(m.feedId);
         lastFreshPrice[p.market] = block.timestamp;
-        // Every unfolded change counts as a maximum-size open, so the limit can only be conservative.
-        uint256 pending = (_oiDeltas[p.market].length - st.consumed) * m.maxPairSize;
+        // Every unfolded open counts at the maximum pair size, so the limit can only be conservative.
+        uint256 pending = (opensPushed[p.market] - opensFolded[p.market]) * m.maxPairSize;
         if (!openVerifier.verify(proof, PairInputs.open(p, m, _keys(), mark, st.index, st.head, pending))) revert InvalidProof();
+        _isOpenDelta[p.market][_oiDeltas[p.market].length] = true;
+        opensPushed[p.market]++;
         _oiDeltas[p.market].push(_field(p.deltaCommitment));
-
-        bytes32[] memory nfs = new bytes32[](2);
-        nfs[0] = p.nullifiers[0];
-        nfs[1] = p.nullifiers[1];
-        emit RecordsConsumed(nfs);
+        _emitConsumed2(p.nullifiers);
 
         _create(RECORD_PAIR, p.pairCommitment, _flattenPair(p.pairCt));
         _create(RECORD_FREE, p.refundCommitment, _copy(p.refundCt));
@@ -368,7 +442,9 @@ contract PrivatePairs is ShieldedPool, PairTypes {
 
     /// @notice Replaces a live pair with its next version: funding, margin changes or a partial reduce. Without a fresh
     ///         price the mark is 0, which the circuit accepts only for adding margin and settling funding.
+    ///         Once an exit request on the pair has matured the lineage is frozen, so the forced close always lands.
     function updatePair(bytes calldata proof, UpdatePublic calldata p) external nonReentrant {
+        if (p.asOf > block.timestamp || p.asOf + MAX_UPDATE_SKEW < block.timestamp) revert StaleAsOf(p.asOf, block.timestamp);
         Market memory m = _market(p.market);
         _requireRoot(p.root);
         _consume(p.nullifiers[0]);
@@ -380,20 +456,19 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         // A pending exit follows the pair to its next version, keeping its requester and original deadline.
         ExitRequest memory pending = exitRequests[p.nullifiers[0]];
         if (pending.matureAt != 0) {
+            if (block.timestamp >= pending.matureAt) revert ExitMatured(p.nullifiers[0]);
             if (p.carriedNullifier == 0) revert ExitNotCarried(p.nullifiers[0]);
             delete exitRequests[p.nullifiers[0]];
             exitRequests[p.carriedNullifier] = pending;
             emit ExitRequested(p.carriedNullifier, pending.requester, pending.matureAt);
         }
 
-        bytes32[] memory nfs = new bytes32[](2);
-        nfs[0] = p.nullifiers[0];
-        nfs[1] = p.nullifiers[1];
-        emit RecordsConsumed(nfs);
+        _emitConsumed2(p.nullifiers);
         _oiDeltas[p.market].push(_field(p.deltaCommitment));
         _create(RECORD_PAIR, p.pairCommitment, _flattenPair(p.pairCt));
         _create(RECORD_FREE, p.outCommitment, _copy(p.outCt));
         _create(RECORD_FREE, p.feeCommitment, _copy(p.feeCt));
+        _createFee(p.relayFee);
     }
 
     /// @notice Starts a forced exit for a live pair the caller's proof shows it owns one side of. Anyone may relay it.
@@ -426,6 +501,7 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         for (uint256 i; i < 3; i++) {
             _create(RECORD_FREE, p.commitments[i], _copy(p.ciphertexts[i]));
         }
+        _createFee(p.relayFee);
         _creditBond(p.nullifier);
         emit PairClosed(p.market, p.nullifier, p.mode, mark);
     }
@@ -467,7 +543,7 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         }
         if (p.mode != CLOSE_DEAD_ORACLE) revert BadCloseMode(p.mode);
         uint256 lastSeen = updatedAt > lastFreshPrice[p.market] ? updatedAt : lastFreshPrice[p.market];
-        if (fresh || block.timestamp - lastSeen < ORACLE_DEAD_AFTER) revert OracleNotDead(p.market);
+        if (fresh || lastSeen >= block.timestamp || block.timestamp - lastSeen < ORACLE_DEAD_AFTER) revert OracleNotDead(p.market);
         return 0;
     }
 
@@ -478,11 +554,8 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         }
     }
 
-
-
-
     function _verifyEpoch(bytes calldata proof, FundingPublic calldata p, Market memory m, bytes32[] memory deltas, uint256 dt, uint256 mark) internal view {
-        bytes32[] memory inputs = PairInputs.funding(p, m, _keys(), deltas, EpochContext(_funding[p.market].head, dt, mark, marketBond[p.market]));
+        bytes32[] memory inputs = PairInputs.funding(p, m, _keys(), deltas, EpochContext(_funding[p.market].head, dt, mark, marketBond[p.market], _funding[p.market].bondUsed));
         if (!fundingEpochVerifier.verify(proof, inputs)) revert InvalidProof();
     }
 
@@ -513,6 +586,18 @@ contract PrivatePairs is ShieldedPool, PairTypes {
         bytes32[] memory nfs = new bytes32[](1);
         nfs[0] = nf;
         emit RecordsConsumed(nfs);
+    }
+
+    function _emitConsumed2(bytes32[2] calldata nf) internal {
+        bytes32[] memory nfs = new bytes32[](2);
+        nfs[0] = nf[0];
+        nfs[1] = nf[1];
+        emit RecordsConsumed(nfs);
+    }
+
+    /// @dev Always created, even for a zero fee, so a paid action and a waived one have the same leaves and events.
+    function _createFee(FeeOut calldata f) internal {
+        _create(RECORD_FREE, f.commitment, _copy(f.ct));
     }
 
     function _create(uint8 kind, bytes32 commitment, bytes32[] memory ciphertext) internal {

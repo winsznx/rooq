@@ -5,13 +5,17 @@ import {IHonkVerifier} from "./ShieldedPool.sol";
 
 uint256 constant CT_NOTE = 7;
 uint256 constant CT_LOCK = 15;
-uint256 constant CT_PAIR = 22;
+uint256 constant CT_PAIR = 23;
 uint256 constant PAIR_KEYS = 4;
 uint256 constant CT_MARKET = 8;
 uint256 constant CT_CLAIM = 13;
 uint256 constant CLAIM_KEYS = 3;
 uint256 constant MARKET_KEYS = 3;
 uint256 constant OI_SLOTS = 8;
+/// @dev Contract-supplied bounds the circuits check (spec-pairs #5, #14). PrivatePairs re-exports them as public constants.
+uint256 constant PAIR_MIN_UPDATE_GAP = 10 minutes;
+uint256 constant LOCK_MAX_INTENT_LIFETIME = 7 days;
+uint256 constant LOCK_MAX_MAKER_LIFETIME = 30 days;
 
 /// @notice Shared shapes of PrivatePairs and PairInputs.
 abstract contract PairTypes {
@@ -38,6 +42,12 @@ abstract contract PairTypes {
         IHonkVerifier pairUpdate;
     }
 
+    /// @dev The relay fee note every relayed action creates, zero or not, so paid and free calls look the same on chain.
+    struct FeeOut {
+        bytes32 commitment;
+        bytes32[CT_NOTE] ct;
+    }
+
     struct FeeRecipient {
         uint256 auth;
         Point key;
@@ -54,6 +64,7 @@ abstract contract PairTypes {
         uint256 takerFeeBps;
         uint256 maxOiUsdWad;
         uint256 maxPairSize;
+        uint256 maxCloseSpreadBps;
     }
 
     struct Market {
@@ -67,6 +78,7 @@ abstract contract PairTypes {
         uint256 takerFeeBps;
         uint256 maxOiUsdWad;
         uint256 maxPairSize;
+        uint256 maxCloseSpreadBps;
     }
 
     struct FundingState {
@@ -74,6 +86,8 @@ abstract contract PairTypes {
         uint256 lastEpoch;
         bytes32 head;
         uint256 consumed;
+        /// @notice Bond the market has drawn so far. Public so the creator can get the rest back without operators (#24).
+        uint256 bondUsed;
     }
 
     struct FundingPublic {
@@ -84,6 +98,7 @@ abstract contract PairTypes {
         uint256 indexNeg;
         uint256 claimRatio;
         bytes32[CT_MARKET][MARKET_KEYS] ciphertexts;
+        uint256 bondUsedNext;
     }
 
     struct LockPublic {
@@ -95,6 +110,8 @@ abstract contract PairTypes {
         bytes32[CT_LOCK] ownerCt;
         bytes32[CT_LOCK] coordinatorCt;
         bytes32[CT_LOCK][2] riskCt;
+        uint256 asOf;
+        FeeOut relayFee;
     }
 
     struct OpenPublic {
@@ -123,6 +140,8 @@ abstract contract PairTypes {
         uint256 market;
         bytes32 deltaCommitment;
         bytes32 carriedNullifier;
+        uint256 asOf;
+        FeeOut relayFee;
     }
 
     struct LiquidatePublic {
@@ -142,6 +161,7 @@ abstract contract PairTypes {
         bytes32 commitment;
         bytes32[CT_NOTE] ciphertext;
         bytes32 deltaCommitment;
+        FeeOut relayFee;
     }
 
     struct SweepPublic {
@@ -160,6 +180,7 @@ abstract contract PairTypes {
         uint256 market;
         bytes32 deltaCommitment;
         uint256 mode;
+        FeeOut relayFee;
     }
 
     struct ExitRequest {
@@ -173,6 +194,7 @@ abstract contract PairTypes {
         bytes32 commitment;
         bytes32[CT_NOTE] ciphertext;
         uint256 asOf;
+        FeeOut relayFee;
     }
 
     struct EpochContext {
@@ -180,11 +202,13 @@ abstract contract PairTypes {
         uint256 dt;
         uint256 mark;
         uint256 bond;
+        uint256 bondUsed;
     }
 
     struct Modules {
         address spot;
         address markets;
+        address registry;
     }
 
     /// @dev Everything fixed at deployment that public inputs need.
