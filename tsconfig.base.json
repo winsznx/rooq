@@ -13,6 +13,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "allowImportingTsExtensions": false,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@rooq/private-sdk": ["./packages/private-sdk/src/index.ts"],
+      "@rooq/private-sdk/*": ["./packages/private-sdk/src/*.ts"]
+    }
   }
 }

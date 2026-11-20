@@ -1,5 +1,5 @@
 import { BarretenbergSync, GRUMPKIN_G1_GENERATOR } from "@aztec/bb.js";
-import { fromBytes, toBytes32 } from "./field";
+import { fromBytes, toBytes32 } from "./field.js";
 
 /** A Grumpkin point (affine). Coordinates are BN254 field elements. */
 export interface Point {

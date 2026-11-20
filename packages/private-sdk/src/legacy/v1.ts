@@ -7,13 +7,13 @@
  * Differences from v1 to v2: every commitment hashes version 1; `Pair` has no `updated_at` (plaintext 20 fields);
  * `PoolState` has no protocol accruals (5 fields); `LpClaim` slots 6 and 7 meant absolute minimum outputs.
  */
-import { FREE_DOMAIN, RECORD_VERSION, T_LOCK, T_NOTE, T_PAIR, T_POOL, T_TERMS } from "../constants";
-import { hash } from "../crypto";
-import { decrypt } from "../encryption";
-import type { WalletKeys } from "../keys";
-import { noteInner, ownerNullifier, type OwnedNote } from "../note";
-import type { LockRecord, PairRecord } from "../pairs";
-import type { CreatedNotes } from "../scan";
+import { FREE_DOMAIN, RECORD_VERSION, T_LOCK, T_NOTE, T_PAIR, T_POOL, T_TERMS } from "../constants.js";
+import { hash } from "../crypto.js";
+import { decrypt } from "../encryption.js";
+import type { WalletKeys } from "../keys.js";
+import { noteInner, ownerNullifier, type OwnedNote } from "../note.js";
+import type { LockRecord, PairRecord } from "../pairs.js";
+import type { CreatedNotes } from "../scan.js";
 
 export const RECORD_VERSION_V1 = 1n;
 export const LOCK_PT_LEN_V1 = 13;

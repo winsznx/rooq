@@ -1,10 +1,10 @@
-import { AMOUNT_LIMIT, APPEND_BATCH, FREE_DOMAIN, KIND_DEPOSIT, KIND_LEAF, TREE_DEPTH } from "./constants";
-import { mulGenerator, type Point } from "./crypto";
-import { encrypt } from "./encryption";
-import { randomField, toHex32, type Hex } from "./field";
-import { ownerTag, type PrivateAddress, type WalletKeys } from "./keys";
-import type { MerkleTree } from "./tree";
-import { noteCommitment, noteInner, outputRho, ownerNullifier, type OwnedNote } from "./note";
+import { AMOUNT_LIMIT, APPEND_BATCH, FREE_DOMAIN, KIND_DEPOSIT, KIND_LEAF, TREE_DEPTH } from "./constants.js";
+import { mulGenerator, type Point } from "./crypto.js";
+import { encrypt } from "./encryption.js";
+import { randomField, toHex32, type Hex } from "./field.js";
+import { ownerTag, type PrivateAddress, type WalletKeys } from "./keys.js";
+import type { MerkleTree } from "./tree.js";
+import { noteCommitment, noteInner, outputRho, ownerNullifier, type OwnedNote } from "./note.js";
 
 /** Nested input map accepted by noir_js `Noir.execute`. */
 export type InputValue = string | InputValue[] | { [k: string]: InputValue };
