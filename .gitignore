@@ -20,6 +20,8 @@ zk/bench/evm/lib/
 zk/bench/evm/cache/
 zk/bench/noir/transfer/Prover_b.toml
 contracts/deployments/privacy-e2e*.json
+# Key possession proofs made for a deploy; public, but regenerated per deployment.
+contracts/deployments/key-pop-*/
 zk/bench/evm/broadcast/
 apps/web/public/proving/
 
@@ -31,3 +33,5 @@ contracts/deployments/testnet.dryrun*.json
 
 # Private planning, specs and brand sources. Never public.
 /internal/
+
+__pycache__/

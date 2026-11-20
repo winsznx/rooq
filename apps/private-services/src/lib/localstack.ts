@@ -4,12 +4,13 @@
  */
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
-import { depositOpening, deriveKeys, initCrypto, mulGenerator, noteInner, toHex32, type Point } from "@rooq/private-sdk";
+import { depositDerivation, depositOpening, deriveKeys, initCrypto, mulGenerator, noteInner, Prover, toHex32, type CompiledCircuit, type Point } from "@rooq/private-sdk";
 import { createPublicClient, createWalletClient, http, parseAbi, type Abi, type Account, type Address, type Chain, type Hex, type PublicClient, type Transport, type WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 import { sleep } from "./chain";
 import { PORTS, REPO_ROOT } from "./config";
+import { proveKeyPop, writeKeyPops, type PopSlot } from "./key-pop";
 
 const MNEMONIC = "test test test test test test test test test test test junk";
 const APP_DIR = `${REPO_ROOT}apps/private-services`;
@@ -17,14 +18,14 @@ const APP_DIR = `${REPO_ROOT}apps/private-services`;
 export const LOCAL_RPC_PORT = Number(process.env.PRIVATE_RPC_PORT ?? 8548);
 export const LOCAL_RPC = `http://127.0.0.1:${LOCAL_RPC_PORT}`;
 
-export type ServiceName = "read-api" | "relayer" | "queue" | "coordinator" | "risk-a" | "risk-b" | "maker";
+export type ServiceName = "read-api" | "relayer" | "queue" | "coordinator" | "risk-a" | "risk-b" | "maker" | "analytics";
 
 export const SERVICE_PORTS: Record<ServiceName, number> = {
-  "read-api": PORTS.readApi, relayer: PORTS.relayer, queue: PORTS.queue, coordinator: PORTS.coordinator, "risk-a": PORTS.riskA, "risk-b": PORTS.riskB, maker: PORTS.maker,
+  "read-api": PORTS.readApi, relayer: PORTS.relayer, queue: PORTS.queue, coordinator: PORTS.coordinator, "risk-a": PORTS.riskA, "risk-b": PORTS.riskB, maker: PORTS.maker, analytics: PORTS.analytics,
 };
 
 const SERVICE_FILES: Record<ServiceName, string> = {
-  "read-api": "read-api", relayer: "relayer", queue: "queue", coordinator: "coordinator", "risk-a": "risk", "risk-b": "risk", maker: "maker",
+  "read-api": "read-api", relayer: "relayer", queue: "queue", coordinator: "coordinator", "risk-a": "risk", "risk-b": "risk", maker: "maker", analytics: "analytics",
 };
 
 export function anvilKey(index: number): Hex {
@@ -50,6 +51,9 @@ export const LOCAL_SCALARS = {
   coordinator: 0xc0041n, riskA: 0xa1a1n, riskB: 0xb2b2n, fee: 0xfee5eedn, maker: 0x3a4e45eedn, alice: 0xa11ce5eedn, rewardA: 0x1a5eedn, rewardB: 0x1b5eedn,
 } as const;
 
+/** Lets the local maker's own locks through the relayer as waived operator traffic. A fixed public value, local only. */
+const LOCAL_SERVICE_TOKEN = "local-operator-traffic";
+
 export interface LocalDeployment {
   readonly pool: Address;
   readonly asset: Address;
@@ -64,6 +68,8 @@ export interface LocalDeployment {
   readonly markets: Address;
   readonly thirdFeed: Address;
   readonly thirdFeedId: Hex;
+  /** Local stand-in for the governance timelock: zero delay, the deployer proposes and executes. */
+  readonly timelock: Address;
 }
 
 export interface StackOptions {
@@ -105,20 +111,37 @@ export class LocalStack {
     await initCrypto();
     const toEnv = (name: string, p: Point): Record<string, string> => ({ [`${name}_X`]: p.x.toString(), [`${name}_Y`]: p.y.toString() });
     const fee = deriveKeys(LOCAL_SCALARS.fee);
-    const relative = `./deployments/${this.opts.deploymentFile.split("/").at(-1)}`;
-    execFileSync("forge", ["script", "script/DeployPrivatePairs.s.sol", "--rpc-url", LOCAL_RPC, "--broadcast", "--slow", "--silent"], {
-      cwd: `${REPO_ROOT}contracts`,
-      env: {
-        ...process.env, FOUNDRY_OUT: this.opts.forgeOut, FOUNDRY_CACHE_PATH: `${this.opts.forgeOut}/../cache`, DEPLOYER_PRIVATE_KEY: this.keys.deployer, PRIVACY_OUT: relative,
-        ...toEnv("COORDINATOR", mulGenerator(LOCAL_SCALARS.coordinator)), ...toEnv("RISK_A", mulGenerator(LOCAL_SCALARS.riskA)), ...toEnv("RISK_B", mulGenerator(LOCAL_SCALARS.riskB)),
-        FEE_AUTH: fee.auth.toString(), FEE_X: fee.pk.x.toString(), FEE_Y: fee.pk.y.toString(),
-      },
-      stdio: "pipe",
-      maxBuffer: 256 * 1024 * 1024,
-      timeout: 300_000,
+    const name = this.opts.deploymentFile.split("/").at(-1)!;
+    const relative = `./deployments/${name}`;
+    // The deploy needs the four key holders' possession proofs, bound to the custody address it is about to create (#18). With
+    // no Safe on anvil the script stands in a zero-delay timelock run by the deployer (local only).
+    const popDir = `deployments/key-pop-${name.replace(/\.json$/, "")}`;
+    const env: NodeJS.ProcessEnv = {
+      ...process.env, FOUNDRY_OUT: this.opts.forgeOut, FOUNDRY_CACHE_PATH: `${this.opts.forgeOut}/../cache`, DEPLOYER_PRIVATE_KEY: this.keys.deployer, PRIVACY_OUT: relative, PRIVACY_POP_DIR: popDir,
+      ...toEnv("COORDINATOR", mulGenerator(LOCAL_SCALARS.coordinator)), ...toEnv("RISK_A", mulGenerator(LOCAL_SCALARS.riskA)), ...toEnv("RISK_B", mulGenerator(LOCAL_SCALARS.riskB)),
+      FEE_AUTH: fee.auth.toString(), FEE_X: fee.pk.x.toString(), FEE_Y: fee.pk.y.toString(),
+    };
+    const forge = (args: string[]): string => execFileSync("forge", ["script", "script/DeployPrivatePairs.s.sol", "--rpc-url", LOCAL_RPC, ...args], {
+      cwd: `${REPO_ROOT}contracts`, env, encoding: "utf8", stdio: "pipe", maxBuffer: 256 * 1024 * 1024, timeout: 300_000,
     });
-    const d = JSON.parse(readFileSync(this.opts.deploymentFile, "utf8")) as { pool: Address; asset: Address; feed: Address; otherFeed: Address; deploymentId: number | string; market: number; startBlock: number; spot: Address; spotTokens: Address[]; markets: Address; thirdFeed: Address; thirdFeedId: Hex };
-    this.deployment = { pool: d.pool, asset: d.asset, feed: d.feed, otherFeed: d.otherFeed, deploymentId: BigInt(d.deploymentId), market: BigInt(d.market), startBlock: d.startBlock, file: this.opts.deploymentFile, spot: d.spot, spotTokens: d.spotTokens, markets: d.markets, thirdFeed: d.thirdFeed, thirdFeedId: d.thirdFeedId };
+    const predicted = /deploymentId (\d+)/.exec(forge(["--sig", "predictCustody()"]))?.[1];
+    if (!predicted) throw new Error("predictCustody printed no deployment id");
+    const deploymentId = BigInt(predicted);
+    const circuit = JSON.parse(readFileSync(`${this.opts.circuitsDir ?? `${REPO_ROOT}zk/circuits/target`}/key_pop.json`, "utf8")) as CompiledCircuit;
+    const prover = await Prover.create(circuit, this.opts.proverThreads);
+    try {
+      const holders: [PopSlot, bigint][] = [["coordinator", LOCAL_SCALARS.coordinator], ["risk_a", LOCAL_SCALARS.riskA], ["risk_b", LOCAL_SCALARS.riskB], ["fee", fee.encSk]];
+      const pops = [];
+      for (const [slot, sk] of holders) pops.push(await proveKeyPop(prover, sk, deploymentId, 0n, slot));
+      writeKeyPops(`${REPO_ROOT}contracts/${popDir}`, pops);
+    } finally {
+      await prover.destroy();
+    }
+    forge(["--broadcast", "--slow", "--silent"]);
+    const d = JSON.parse(readFileSync(this.opts.deploymentFile, "utf8")) as { pool: Address; asset: Address; feed: Address; otherFeed: Address; deploymentId: number | string; market: number; startBlock: number; spot: Address; spotTokens: Address[]; markets: Address; thirdFeed: Address; thirdFeedId: Hex; governance: { timelock: Address } | string };
+    if (BigInt(d.deploymentId) !== deploymentId) throw new Error("the deployment landed at another address than predicted; were other transactions sent from the deployer in between?");
+    this.deployment = { pool: d.pool, asset: d.asset, feed: d.feed, otherFeed: d.otherFeed, deploymentId: BigInt(d.deploymentId), market: BigInt(d.market), startBlock: d.startBlock, file: this.opts.deploymentFile, spot: d.spot, spotTokens: d.spotTokens, markets: d.markets, thirdFeed: d.thirdFeed, thirdFeedId: d.thirdFeedId,
+      timelock: (typeof d.governance === "string" ? (JSON.parse(d.governance) as { timelock: Address }) : d.governance).timelock };
     return this.deployment;
   }
 
@@ -129,12 +152,14 @@ export class LocalStack {
     };
     const specific: Record<ServiceName, Record<string, string>> = {
       "read-api": {},
-      relayer: { RELAYER_TX_KEY: this.keys.relayerTx },
+      relayer: { RELAYER_TX_KEY: this.keys.relayerTx, RELAYER_SERVICE_TOKEN: LOCAL_SERVICE_TOKEN },
       queue: { QUEUE_TX_KEY: this.keys.queueTx },
       coordinator: { COORDINATOR_SK: LOCAL_SCALARS.coordinator.toString(), COORDINATOR_TX_KEY: this.keys.coordinatorTx },
       "risk-a": { RISK_ID: "A", RISK_SK: LOCAL_SCALARS.riskA.toString(), RISK_TX_KEY: this.keys.riskATx, RISK_REWARD_SEED: LOCAL_SCALARS.rewardA.toString() },
       "risk-b": { RISK_ID: "B", RISK_SK: LOCAL_SCALARS.riskB.toString(), RISK_TX_KEY: this.keys.riskBTx, RISK_REWARD_SEED: LOCAL_SCALARS.rewardB.toString() },
-      maker: { MAKER_SEED: LOCAL_SCALARS.maker.toString(), MAKER_TERMS: `1:20:${100n * 10n ** 18n}:30:${300n * 10n ** 6n}:2,2:20:${100n * 10n ** 18n}:30:${300n * 10n ** 6n}:1,100:20:${100n * 10n ** 18n}:30:${300n * 10n ** 6n}:1` },
+      maker: { MAKER_SEED: LOCAL_SCALARS.maker.toString(), MAKER_RELAYER_TOKEN: LOCAL_SERVICE_TOKEN, MAKER_TERMS: `1:20:${100n * 10n ** 18n}:30:${300n * 10n ** 6n}:2,2:20:${100n * 10n ** 18n}:30:${300n * 10n ** 6n}:1,100:20:${100n * 10n ** 18n}:30:${300n * 10n ** 6n}:1` },
+      // Anvil mines on demand, so a finality margin would never be reached; a fresh chain gets a fresh in-memory index.
+      analytics: { ANALYTICS_DB_PATH: ":memory:", FINALITY_BLOCKS: "0", ...(process.env.ADMIN_API_TOKEN ? { ADMIN_API_TOKEN: process.env.ADMIN_API_TOKEN } : {}) },
     };
     return { PATH: process.env.PATH, HOME: process.env.HOME, ...common, ...specific[name], ...this.opts.serviceEnv?.[name] };
   }
@@ -208,6 +233,8 @@ export function localClients(rpc = LOCAL_RPC): LocalClients {
 /** Mints test tokens to the EOA of `key`, approves the pool and shields `amounts` as this seed's k-th deposits. */
 export async function shieldDeposits(c: LocalClients, deployerKey: Hex, key: Hex, pool: Address, asset: Address, abi: Abi, seed: bigint, startK: number, amounts: readonly bigint[]): Promise<void> {
   const owner = deriveKeys(seed).owner;
+  // Same id ShieldedPool's constructor sets, so the opening matches what Wallet.scanDeposits looks for.
+  const derivation = depositDerivation(2, (BigInt(await c.client.getChainId()) << 160n) | BigInt(pool));
   const total = amounts.reduce((a, b) => a + b, 0n);
   const eoa = privateKeyToAccount(key).address;
   const send = async (wallet: WalletClient<Transport, Chain, Account>, to: Address, data: readonly unknown[], fn: string, callAbi: Abi = erc20Abi): Promise<void> => {
@@ -218,7 +245,7 @@ export async function shieldDeposits(c: LocalClients, deployerKey: Hex, key: Hex
   await send(c.wallet(deployerKey), asset, [eoa, total], "mintTo");
   await send(c.wallet(key), asset, [pool, total], "approve");
   for (const [i, amount] of amounts.entries()) {
-    const { rho, blind } = depositOpening(seed, startK + i);
+    const { rho, blind } = depositOpening(seed, startK + i, derivation);
     await send(c.wallet(key), pool, [asset, amount, toHex32(noteInner(owner, rho, blind))], "shield", abi);
   }
 }

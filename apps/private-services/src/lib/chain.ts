@@ -16,6 +16,8 @@ export interface MarketInfo {
   readonly takerFeeBps: bigint;
   readonly maxOiUsdWad: bigint;
   readonly maxPairSize: bigint;
+  /** Cap on a maker's committed close spread; open_pair refuses a maker above it. */
+  readonly maxCloseSpreadBps: bigint;
 }
 
 export interface FundingState {
@@ -23,6 +25,8 @@ export interface FundingState {
   readonly lastEpoch: bigint;
   readonly head: bigint;
   readonly consumed: bigint;
+  /** Public bond draw (#24); the epoch proof takes it as bond_used_prev. */
+  readonly bondUsed: bigint;
 }
 
 export interface PriceRead {
@@ -46,7 +50,7 @@ export interface DeploymentFile {
 
 export type KeySlot = "coordinator" | "riskA" | "riskB";
 
-interface KeySetRead {
+export interface KeySetRead {
   readonly coordinator: Point;
   readonly riskA: Point;
   readonly riskB: Point;
@@ -57,13 +61,15 @@ export interface SpotPoolInfo {
   readonly token0: bigint;
   readonly token1: bigint;
   readonly feeBps: bigint;
+  /** Governed by the timelock, so it is re-read while a service runs (`refreshProtocolShares`). */
+  protocolBps: bigint;
 }
 
-export const SPOT_FUNCTIONS: ReadonlySet<string> = new Set(["swap", "addLiquidity", "setLiquidityRequest", "removeLiquidity"]);
+export const SPOT_FUNCTIONS: ReadonlySet<string> = new Set(["swap", "addLiquidity", "setLiquidityRequest", "removeLiquidity", "sweepProtocolFees"]);
 export const MARKETS_FUNCTIONS: ReadonlySet<string> = new Set(["redeemClaim", "sweepInsurance", "releaseBond", "closeToNewPositions", "created", "keyEpoch", "keySetAt", "pendingKeyRotation", "scheduleKeyRotation", "cancelKeyRotation", "activateKeyRotation"]);
-const MARKETS_EVENTS: ReadonlySet<string> = new Set(["MarketCreated", "BondReleased", "MarketClosedToNewPositions"]);
+const MARKETS_EVENTS: ReadonlySet<string> = new Set(["MarketCreated", "BondReleased", "MarketClosedToNewPositions", "KeyRotationActivated"]);
 
-const ARTIFACTS_WITH_ERRORS = ["OracleAdapter", ...["Append", "Spend", "Lock", "OpenPair", "Liquidate", "Release", "FundingEpoch", "ClosePair", "ExitRequest", "PairUpdate", "RedeemClaim", "InsuranceSweep"].map((n) => `${n}Verifier`)];
+const ARTIFACTS_WITH_ERRORS = ["OracleAdapter", ...["Append", "Spend", "Lock", "OpenPair", "Liquidate", "Release", "FundingEpoch", "ClosePair", "ExitRequest", "PairUpdate", "RedeemClaim", "InsuranceSweep", "SweepProtocol", "KeyPop"].map((n) => `${n}Verifier`)];
 
 const artifactAbi = (out: string, name: string): Abi => (JSON.parse(readFileSync(`${out}/${name}.sol/${name}.json`, "utf8")) as { abi: Abi }).abi;
 
@@ -102,9 +108,11 @@ export function loadPoolAbi(out = process.env.ARTIFACTS_OUT ?? `${REPO_ROOT}cont
 const priceAbi = parseAbi(["function getPrice(bytes32 feedId) view returns (uint256 priceWad, uint256 updatedAt, bool fresh)"]);
 
 const FIRST_CREATED_MARKET = 100n;
+const PROTOCOL_SHARE_REFRESH_MS = 60_000;
 
 export class ChainContext {
   private keyEpochSeen: bigint | null = null;
+  private protocolSharesReadAt = Date.now();
 
   private constructor(
     readonly config: BaseConfig,
@@ -126,6 +134,8 @@ export class ChainContext {
     readonly spotPools: readonly SpotPoolInfo[],
     readonly marketsModule: Address | null,
     private readonly rotationSupported: boolean,
+    /** The key set the deployment started with; later sets come from KeyRotationActivated in the ledger. */
+    readonly genesisKeys: KeySetRead,
   ) {}
 
   /** Refuses mainnet and any RPC that does not serve the configured chain, before a key is used. */
@@ -156,14 +166,17 @@ export class ChainContext {
     const spotPools: SpotPoolInfo[] = [];
     if (spot) {
       for (let id = 1n; ; id++) {
-        const p = (await client.readContract({ address: spot, abi, functionName: "pool", args: [id] })) as { token0: Address; token1: Address; feeBps: bigint };
+        const p = (await client.readContract({ address: spot, abi, functionName: "pool", args: [id] })) as { token0: Address; token1: Address; feeBps: bigint; protocolBps: bigint };
         if (BigInt(p.token0) === 0n) break;
-        spotPools.push({ id, token0: BigInt(p.token0), token1: BigInt(p.token1), feeBps: p.feeBps });
+        spotPools.push({ id, token0: BigInt(p.token0), token1: BigInt(p.token1), feeBps: p.feeBps, protocolBps: p.protocolBps });
       }
     }
     const rotationSupported = deployment.markets ? await supportsRotation(client, deployment.markets, abi) : false;
+    const genesisKeys = rotationSupported && deployment.markets
+      ? (await client.readContract({ address: deployment.markets, abi, functionName: "keySetAt", args: [0n] })) as KeySetRead
+      : { coordinator: { x: cx, y: cy }, riskA: { x: ax, y: ay }, riskB: { x: bx, y: by } };
     return new ChainContext(config, chain, client, abi, pool, deployment.asset, oracle, BigInt(deployment.startBlock), deploymentId, { x: cx, y: cy }, [{ x: ax, y: ay }, { x: bx, y: by }],
-      { auth: feeAuth, pk: { x: feeX, y: feeY } }, exitBond, markets, spot, deployment.spotTokens ?? [], spotPools, deployment.markets ?? null, rotationSupported);
+      { auth: feeAuth, pk: { x: feeX, y: feeY } }, exitBond, markets, spot, deployment.spotTokens ?? [], spotPools, deployment.markets ?? null, rotationSupported, genesisKeys);
   }
 
   read<T>(functionName: string, args: readonly unknown[] = []): Promise<T> {
@@ -171,12 +184,17 @@ export class ChainContext {
   }
 
   async funding(market: bigint): Promise<FundingState> {
-    const s = await this.read<{ index: bigint; lastEpoch: bigint; head: Hex; consumed: bigint }>("funding", [market]);
-    return { index: s.index, lastEpoch: s.lastEpoch, head: BigInt(s.head), consumed: s.consumed };
+    const s = await this.read<{ index: bigint; lastEpoch: bigint; head: Hex; consumed: bigint; bondUsed: bigint }>("funding", [market]);
+    return { index: s.index, lastEpoch: s.lastEpoch, head: BigInt(s.head), consumed: s.consumed, bondUsed: s.bondUsed };
   }
 
   oiDeltaCount(market: bigint): Promise<bigint> {
     return this.read<bigint>("oiDeltaCount", [market]);
+  }
+
+  /** Opens pushed and not yet folded. open_pair counts each at the maximum pair size (#7); closes and reduces don't count. */
+  pendingOpens(market: bigint): Promise<bigint> {
+    return this.read<bigint>("pendingOpens", [market]);
   }
 
   async oiDelta(market: bigint, index: bigint): Promise<bigint> {
@@ -235,6 +253,19 @@ export class ChainContext {
     return BigInt(p.head);
   }
 
+  /**
+   * The protocol share of a pool's fee is a swap public input the timelock can change. Read at most once a minute, or at once
+   * with `force` after a refused proof, since a change invalidates swap proofs in flight.
+   */
+  async refreshProtocolShares(force = false): Promise<void> {
+    if (!this.spot || (!force && Date.now() - this.protocolSharesReadAt < PROTOCOL_SHARE_REFRESH_MS)) return;
+    this.protocolSharesReadAt = Date.now();
+    for (const p of this.spotPools) {
+      const read = (await this.client.readContract({ address: this.spot, abi: this.abi, functionName: "pool", args: [p.id] })) as { protocolBps: bigint };
+      p.protocolBps = read.protocolBps;
+    }
+  }
+
   spotPool(id: bigint): SpotPoolInfo | undefined {
     return this.spotPools.find((p) => p.id === id);
   }
@@ -290,7 +321,7 @@ export class ChainContext {
       spot: this.spot,
       marketsModule: this.marketsModule,
       spotTokens: this.spotTokens,
-      spotPools: this.spotPools.map((p) => ({ id: p.id, token0: p.token0, token1: p.token1, feeBps: p.feeBps })),
+      spotPools: this.spotPools.map((p) => ({ id: p.id, token0: p.token0, token1: p.token1, feeBps: p.feeBps, protocolBps: p.protocolBps })),
     };
   }
 }

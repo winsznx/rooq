@@ -5,6 +5,8 @@ export interface RequestContext {
   readonly req: Request;
   readonly url: URL;
   readonly params: Readonly<Record<string, string>>;
+  /** The key this request is rate limited under (see `clientKey`). Set by the server; absent when a test calls a handler directly. */
+  readonly client?: string;
 }
 
 export interface Route {
@@ -24,19 +26,87 @@ export function json(body: unknown, status = 200): Response {
   return new Response(stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 }
 
-/** Sliding window, in memory only. Entries expire after the window, so client network data never outlives it. */
-class RateLimiter {
-  private readonly hits = new Map<string, number[]>();
+interface Window {
+  /** Accepted hits in arrival order; entries before `head` have expired and wait for compaction. */
+  times: number[];
+  head: number;
+}
 
-  allow(key: string, perMinute: number, now = Date.now()): boolean {
-    const recent = (this.hits.get(key) ?? []).filter((t) => now - t < 60_000);
-    recent.push(now);
-    this.hits.set(key, recent);
-    return recent.length <= perMinute;
+/**
+ * Sliding window, in memory only. Entries expire after the window, so client network data never outlives it. Only
+ * accepted hits are stored, so a key holds at most its limit and a flood of refused requests costs O(1) each.
+ */
+export class RateLimiter {
+  private readonly hits = new Map<string, Window>();
+
+  constructor(private readonly windowMs = 60_000) {}
+
+  allow(key: string, perWindow: number, now = Date.now()): boolean {
+    return this.allowAll([key], perWindow, now);
+  }
+
+  /** Charges one hit to every key, or to none when any of them is at its limit. */
+  allowAll(keys: readonly string[], perWindow: number, now = Date.now()): boolean {
+    return this.allowEach(keys.map((key) => ({ key, limit: perWindow })), now) === null;
+  }
+
+  /**
+   * Like allowAll with a limit per key, charging `units` hits to each key at once. Returns the first key without room for
+   * all of them, or null when every key was charged.
+   */
+  allowEach(entries: readonly { readonly key: string; readonly limit: number }[], now = Date.now(), units = 1): string | null {
+    const unique = new Map<string, number>();
+    for (const { key, limit } of entries) unique.set(key, Math.min(limit, unique.get(key) ?? limit));
+    const windows: Window[] = [];
+    for (const [key, limit] of unique) {
+      const w = this.window(key, now);
+      if (w.times.length - w.head + units > limit) return key;
+      windows.push(w);
+    }
+    for (const w of windows) for (let i = 0; i < units; i++) w.times.push(now);
+    return null;
+  }
+
+  /** Takes back the latest `units` hits of each key, for a charge whose work never happened. */
+  refund(keys: readonly string[], units = 1): void {
+    for (const key of new Set(keys)) {
+      const w = this.hits.get(key);
+      if (!w) continue;
+      w.times.length = Math.max(w.head, w.times.length - units);
+    }
+  }
+
+  /** Hits currently held for a key, for tests and health. */
+  size(key: string, now = Date.now()): number {
+    const w = this.hits.get(key);
+    if (!w) return 0;
+    this.expire(w, now);
+    return w.times.length - w.head;
   }
 
   prune(now = Date.now()): void {
-    for (const [key, times] of this.hits) if (times.every((t) => now - t >= 60_000)) this.hits.delete(key);
+    for (const [key, w] of this.hits) {
+      this.expire(w, now);
+      if (w.times.length === w.head) this.hits.delete(key);
+    }
+  }
+
+  private window(key: string, now: number): Window {
+    let w = this.hits.get(key);
+    if (!w) {
+      w = { times: [], head: 0 };
+      this.hits.set(key, w);
+    }
+    this.expire(w, now);
+    return w;
+  }
+
+  private expire(w: Window, now: number): void {
+    while (w.head < w.times.length && now - w.times[w.head]! >= this.windowMs) w.head++;
+    if (w.head > 32 && w.head * 2 > w.times.length) {
+      w.times = w.times.slice(w.head);
+      w.head = 0;
+    }
   }
 }
 
@@ -115,10 +185,11 @@ export function startHttpServer(opts: ServerOptions): { stop(): void } {
         }
         if (!route || !params) throw new ServiceError(pathMatched ? 405 : 404, pathMatched ? "METHOD_NOT_ALLOWED" : "NOT_FOUND", pathMatched ? "Method not allowed." : "No such route.", false);
         pattern = route.pattern;
-        if (route.perMinute !== undefined && !limiter.allow(`${route.pattern}|${clientKey(req, srv.requestIP(req)?.address, opts.trustProxy ?? false)}`, route.perMinute)) {
+        const client = clientKey(req, srv.requestIP(req)?.address, opts.trustProxy ?? false);
+        if (route.perMinute !== undefined && !limiter.allow(`${route.pattern}|${client}`, route.perMinute)) {
           throw new ServiceError(429, "RATE_LIMITED", "Too many requests. Wait a minute and try again.", true);
         }
-        response = await route.handler({ req, url, params });
+        response = await route.handler({ req, url, params, client });
       } catch (error) {
         const service = toServiceError(error);
         if (service.statusCode >= 500) opts.log.error("request_failed", error, { route: pattern, reasonCode: service.reasonCode });

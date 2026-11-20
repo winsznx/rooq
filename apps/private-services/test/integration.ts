@@ -10,12 +10,12 @@
 import { tmpdir } from "node:os";
 import { copyFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import {
-  EMPTY_POOL, openPoolState, swapWitness, type PoolInfo, type PoolState,
-  ACTOR_TAKER, addressOf, mulGenerator, PAIR_CT_RISK_A, amountOut, CLAIM_CT_LEN, CLAIM_CT_WINNER, CLOSE_TAKER, closeWitness, deriveKeys, exitRequestWitness, fillPrice, initCrypto, liquidationOutcome, lockAddressKeys, lockCommitment, lockWitness, MerkleTree, openClaim, openLp, openPair, PAIR_CT_LEN, pairCommitment, RECORD_LP, lpAddOutcome, lpSetWitness, lpTerms, LP_CT_LEN, swapTerms,
+  bandForDeposit, EMPTY_POOL, keyPopWitness, lpBandTerms, openPoolState, POOL_CT_LEN, protocolCut, swapWitness, type PoolInfo, type PoolState, type RelayFee,
+  ACTOR_TAKER, addressOf, mulGenerator, PAIR_CT_RISK_A, amountOut, CLAIM_CT_LEN, CLAIM_CT_WINNER, CLOSE_TAKER, closeWitness, deriveKeys, exitRequestWitness, fillPrice, initCrypto, liquidationOutcome, lockAddressKeys, lockCommitment, lockWitness, MerkleTree, openClaim, openLp, openPair, PAIR_CT_LEN, pairCommitment, RECORD_LP, lpAddOutcome, lpSetWitness, LP_CT_LEN, swapTerms,
   PAIR_CT_TAKER, RECORD_CLAIM, RECORD_PAIR, recNullifier, redeemWitness, releaseWitness, spendWitness, takerTerms, toHex32, updateWitness,
   type ClaimRecord, type LockRecord, type LockTerms, type LpRecord, type PairRecord, type ShieldedDeposit, type WalletKeys,
 } from "@rooq/private-sdk";
-import { getAbiItem, parseAbi, toFunctionSelector, type Abi, type Address, type Hex } from "viem";
+import { encodeFunctionData, getAbiItem, parseAbi, toFunctionSelector, type Abi, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 import { bytesToHex, loadPoolAbi, sleep } from "../src/lib/chain";
@@ -30,6 +30,8 @@ const USD = 1_000_000n;
 const FEE_NOTE = 500_000n;
 const RELAYER_FEE_SEED = 0x7e1a1e4n;
 const WAD = 10n ** 18n;
+/** Under the lock circuit's 7-day cap on intents (#14). */
+const TAKER_LOCK_TTL = 6n * 86_400n;
 const ALICE_SEED = LOCAL_SCALARS.alice;
 const SCRATCH = `${tmpdir()}/rooq-services-test-${process.pid}`;
 const FORGE_OUT = process.env.FORGE_OUT ?? `${tmpdir()}/rooq-private-services-forge/out`;
@@ -86,7 +88,7 @@ const counter = async (name: ServiceName, c: string): Promise<number> => {
 };
 
 interface SyncView { syncedBlock: string; head: string; processed: number; queueLength: number; root: Hex; rootSeq: string; reorgs: number }
-interface MarketView { market: string; imrWad: string; mmrWad: string; penaltyBps: string; scale: string; takerFeeBps: string; funding: { index: string; lastEpoch: string; epochs: number }; markFresh: boolean; mark: string; maxPairSize: string; oiPending: string }
+interface MarketView { market: string; imrWad: string; mmrWad: string; penaltyBps: string; scale: string; takerFeeBps: string; funding: { index: string; lastEpoch: string; epochs: number }; markFresh: boolean; mark: string; maxPairSize: string; maxCloseSpreadBps: string; oiPending: string; deltasPending: string }
 
 const syncView = (): Promise<SyncView> => getJson<SyncView>(`${READ}/v1/sync`);
 const marketView = (id: bigint): Promise<MarketView> => getJson<MarketView>(`${READ}/v1/markets/${id}`);
@@ -195,17 +197,38 @@ class Client {
 
   async placeLock(amount: bigint, terms: LockTerms, expiry: bigint, opts: { asset?: Address; payoutIndex?: number } = {}): Promise<{ jobId: string; body: string; record: LockRecord; payout: WalletKeys; held: { payoutIndex: number } }> {
     const notes = await this.notes();
-    const lockAsset = BigInt(opts.asset ?? this.chainAsset);
-    const note = [...notes].sort((a, b) => (a.value < b.value ? -1 : 1)).find((n) => n.asset === lockAsset && n.value >= amount);
-    assert(note !== undefined, "no note covers the lock");
-    const payoutIndex = opts.payoutIndex ?? Math.max(this.usedPayouts, this.wallet.usedAddresses(this.records).next);
-    this.usedPayouts = Math.max(this.usedPayouts, payoutIndex + 1);
+    const payoutIndex = opts.payoutIndex ?? this.nextPayout();
     const payout = lockAddressKeys(this.seed, payoutIndex);
-    const w = lockWitness({ keys: note!.keys, deployment: this.deployment, tree: this.tree, asset: lockAsset, inputs: [note!], amount, terms, expiry, coordinator: this.coordinatorKey, riskKeys: this.riskKeys, payout: addressOf(payout), view: this.main.pk });
-    const proof = await (await this.provers.get("lock")).prove(w.inputs);
-    const body = JSON.stringify({ proof: bytesToHex(proof.proof), publicInputs: w.publicInputs }, (_k, v: unknown) => (typeof v === "bigint" ? v.toString() : v));
+    const { proof, w } = await this.proveLock(notes, amount, terms, expiry, opts.asset, payout, await blockTime());
+    const body = relayBody(proof, w.publicInputs);
     const jobId = await submitRelay("lock", body);
     return { jobId, body, record: w.record, payout, held: { payoutIndex } };
+  }
+
+  /** Both halves of an LP add in one lockPair call, so the contract writes the two locks at adjacent leaves (#8). */
+  async placeLockPair(pool: bigint, link: bigint, band: { lo: bigint; hi: bigint }, expiry: bigint, token0: Address, amount0: bigint, token1: Address, amount1: bigint): Promise<{ jobId: string; payout: WalletKeys; records: readonly [LockRecord, LockRecord] }> {
+    const notes = await this.notes();
+    const payout = lockAddressKeys(this.seed, this.nextPayout());
+    const [t0, t1] = lpBandTerms(pool, link, band.lo, band.hi);
+    const asOf = await blockTime();
+    const a = await this.proveLock(notes, amount0, t0, expiry, token0, payout, asOf);
+    const b = await this.proveLock(notes, amount1, t1, expiry, token1, payout, asOf);
+    const jobId = await submitRelay("lockPair", JSON.stringify({ proof: [bytesToHex(a.proof), bytesToHex(b.proof)], publicInputs: [a.w.publicInputs, b.w.publicInputs] }, (_k, v: unknown) => (typeof v === "bigint" ? v.toString() : v)));
+    return { jobId, payout, records: [a.w.record, b.w.record] };
+  }
+
+  private nextPayout(): number {
+    const index = Math.max(this.usedPayouts, this.wallet.usedAddresses(this.records).next);
+    this.usedPayouts = index + 1;
+    return index;
+  }
+
+  private async proveLock(notes: Awaited<ReturnType<Client["notes"]>>, amount: bigint, terms: LockTerms, expiry: bigint, asset: Address | undefined, payout: WalletKeys, asOf: bigint) {
+    const lockAsset = BigInt(asset ?? this.chainAsset);
+    const note = [...notes].sort((a, b) => (a.value < b.value ? -1 : 1)).find((n) => n.asset === lockAsset && n.value >= amount);
+    assert(note !== undefined, "no note covers the lock");
+    const w = lockWitness({ keys: note!.keys, deployment: this.deployment, tree: this.tree, asset: lockAsset, inputs: [note!], amount, terms, expiry, asOf, coordinator: this.coordinatorKey, riskKeys: this.riskKeys, payout: addressOf(payout), view: this.main.pk });
+    return { w, proof: (await (await this.provers.get("lock")).prove(w.inputs)).proof };
   }
 
   /** Latest unspent version of the pair on this one-time address. */
@@ -308,9 +331,25 @@ let pool: Address;
 let asset: Address;
 let feed: Address;
 let otherFeed: Address;
+let timelockAddress: Address;
 const proverRef: { current: Provers | null } = { current: null };
 let alice: Client;
 const feedAbi = parseAbi(["function setAnswer(int256)"]);
+const timelockAbi = parseAbi([
+  "function schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay)",
+  "function execute(address target, uint256 value, bytes payload, bytes32 predecessor, bytes32 salt) payable",
+]);
+const spotGovernanceAbi = parseAbi(["function setProtocolShare(uint256 id, uint256 bps)"]);
+let governedCalls = 0n;
+
+/** A governed call through the local stand-in timelock: zero delay, the deployer proposes and executes (local only). */
+async function governed(target: Address, data: Hex): Promise<void> {
+  const salt = toHex32(++governedCalls) as Hex;
+  for (const [functionName, args] of [["schedule", [target, 0n, data, toHex32(0n), salt, 0n]], ["execute", [target, 0n, data, toHex32(0n), salt]]] as const) {
+    const hash = await c.wallet(stack.keys.deployer).writeContract({ address: timelockAddress, abi: timelockAbi, functionName, args, chain: foundry } as Parameters<ReturnType<LocalClients["wallet"]>["writeContract"]>[0]);
+    assert((await c.client.waitForTransactionReceipt({ hash })).status === "success", `timelock ${functionName} reverted`);
+  }
+}
 const erc20Abi = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 
 const setPrice = async (usd: bigint, target: Address = feed): Promise<void> => {
@@ -336,7 +375,7 @@ async function liveMakerLocks(atLeast: number): Promise<void> {
 /** A taker lock through the relayer, matched automatically, returned once the client can read its pair. */
 async function openViaLock(market: bigint, amount: bigint, size: bigint, limit: bigint, isShort = false): Promise<{ pair: HeldPair; payout: WalletKeys; lockBody: string; jobId: string }> {
   await liveMakerLocks(1);
-  const lock = await alice.placeLock(amount, takerTerms(market, isShort, size, limit), (await blockTime()) + 30n * 86_400n);
+  const lock = await alice.placeLock(amount, takerTerms(market, isShort, size, limit), (await blockTime()) + TAKER_LOCK_TTL);
   await waitJob(lock.jobId);
   const pair = await waitFor("coordinator to match the lock", () => alice.pairFor(lock.payout), 180_000);
   await waitSynced();
@@ -354,11 +393,13 @@ async function main(): Promise<void> {
   c = localClients();
   abi = loadPoolAbi(FORGE_OUT);
   ({ pool, asset, feed, otherFeed } = d);
+  timelockAddress = d.timelock;
   proverRef.current = new Provers(2);
   const aliceEoa = privateKeyToAccount(stack.keys.alice).address;
   await shieldDeposits(c, stack.keys.deployer, stack.keys.maker, pool, asset, abi, LOCAL_SCALARS.maker, 0, Array.from({ length: 8 }, () => 1_000n * USD));
   await shieldDeposits(c, stack.keys.deployer, stack.keys.alice, pool, asset, abi, ALICE_SEED, 0, Array.from({ length: 12 }, () => 300n * USD));
-  serviceEnv.relayer!.RELAYER_MIN_FEES = `${asset}:${FEE_NOTE}`;
+  // Fees on spend and release only: every other relayed action runs at the testnet setting, a zero fee note to self.
+  serviceEnv.relayer!.RELAYER_MIN_FEES = `spend:${asset}:${FEE_NOTE},release:${asset}:${FEE_NOTE}`;
   stack.startAll();
   const proverSet = proverRef.current;
   alice = new Client(ALICE_SEED, d.deploymentId, proverSet, await readCoordinator(), asset, await readRiskKeys());
@@ -487,7 +528,7 @@ async function main(): Promise<void> {
     await liveMakerLocks(1);
     const before = await counter("coordinator", "reproved");
     await setAutomine(false);
-    const lock = await alice.placeLock(40n * USD, takerTerms(1n, false, WAD, 130n * WAD), (await blockTime()) + 30n * 86_400n);
+    const lock = await alice.placeLock(40n * USD, takerTerms(1n, false, WAD, 130n * WAD), (await blockTime()) + TAKER_LOCK_TTL);
     await mine(1);
     await waitJob(lock.jobId);
     const selector = toFunctionSelector(getAbiItem({ abi, name: "openPair" }) as Parameters<typeof toFunctionSelector>[0]);
@@ -551,7 +592,7 @@ async function main(): Promise<void> {
     await waitSynced();
     await stack.stop("coordinator", "SIGKILL");
     await liveMakerLocks(1);
-    const lock = await alice.placeLock(60n * USD, takerTerms(1n, false, WAD, 110n * WAD), (await blockTime()) + 30n * 86_400n);
+    const lock = await alice.placeLock(60n * USD, takerTerms(1n, false, WAD, 110n * WAD), (await blockTime()) + TAKER_LOCK_TTL);
     await waitJob(lock.jobId);
     await waitSynced();
     stack.start("coordinator");
@@ -604,8 +645,11 @@ async function main(): Promise<void> {
     return { notesBefore: lock.length, fundingIndex: settled.pair.fundingIndex, takerMarginAfter: settled.pair.takerMargin };
   });
 
-  await step("the taker adds margin through the relayer", async () => {
+  await step("the taker adds margin through the relayer, once the pair's update cooldown has passed", async () => {
     await waitSynced();
+    // The worker's funding settlement just made a new version; the next update waits MIN_UPDATE_GAP (#5).
+    await warp(601);
+    await setPrice(100n);
     const { w, current } = await withReprove(async () => {
     const m = await marketView(1n);
     const current = (await alice.pairFor(p5!.payout))!;
@@ -613,8 +657,10 @@ async function main(): Promise<void> {
     assert(note !== undefined, "a main-address note to add from");
     const w = updateWitness({
       pair: current.pair, leafIndex: current.leafIndex, deployment: d.deploymentId, tree: alice.tree, update: { actor: ACTOR_TAKER, add: 5n * USD, remove: 0n, reduce: 0n }, sk: p5!.payout.sk, noteOwner: note!.keys, note: note!,
-      mark: BigInt(m.mark), imrWad: BigInt(m.imrWad), scale: BigInt(m.scale), feeBps: BigInt(m.takerFeeBps), fundingIndex: BigInt(m.funding.index), riskKeys: await readRiskKeys(), feeTo: await readFeeTo(),
+      mark: BigInt(m.mark), imrWad: BigInt(m.imrWad), mmrWad: BigInt(m.mmrWad), scale: BigInt(m.scale), feeBps: BigInt(m.takerFeeBps), fundingIndex: BigInt(m.funding.index), riskKeys: await readRiskKeys(), feeTo: await readFeeTo(),
+      asOf: await blockTime(),
     });
+    assert(w.outcome.refused === null, "the add is allowed", w.outcome.refused);
     const proof = await (await proverSet.get("pair_update")).prove(w.inputs);
     const job = await submitRelay("updatePair", relayBody(proof.proof, w.publicInputs));
     await waitJob(job);
@@ -666,7 +712,7 @@ async function main(): Promise<void> {
     return { forcedCloses: forced };
   });
 
-  await step("an unmatched lock is released after expiry through the relayer, and a note is spent and withdrawn through it", async () => {
+  await step("an unmatched lock is released after expiry through the relayer, paying its relay fee from the lock, and a note is spent and withdrawn through it", async () => {
     await waitSynced();
     const now = await blockTime();
     const parked = await alice.placeLock(7n * USD, takerTerms(1n, false, WAD, 1n), now + 120n);
@@ -677,17 +723,23 @@ async function main(): Promise<void> {
     await alice.refresh();
     const held = alice.wallet.ownLocks(alice.records).find((l) => l.record.recNonce === parked.record.recNonce);
     assert(held !== undefined, "the client finds its own lock");
-    const rel = releaseWitness({ held: held!, deployment: d.deploymentId, tree: alice.tree, asOf: await blockTime() });
+    const relayerInfo = await getJson<{ address: { auth: string; pk: { x: string; y: string } } }>(`${RELAY}/v1/relayer`);
+    const feeTo = { auth: BigInt(relayerInfo.address.auth), pk: { x: BigInt(relayerInfo.address.pk.x), y: BigInt(relayerInfo.address.pk.y) } };
+    const free = releaseWitness({ held: held!, deployment: d.deploymentId, tree: alice.tree, asOf: await blockTime() });
+    const freeProof = await (await proverSet.get("release")).prove(free.inputs);
+    const unpaid = await fetch(`${RELAY}/v1/relay/release`, { method: "POST", headers: { "content-type": "application/json" }, body: relayBody(freeProof.proof, free.publicInputs) });
+    const unpaidBody = (await unpaid.json()) as { reasonCode: string };
+    assert(unpaid.status === 402 && unpaidBody.reasonCode === "RELAYER_FEE_REQUIRED", "a release with a zero fee note is refused where the relayer charges for releases", { status: unpaid.status, unpaidBody });
+    const fee: RelayFee = { value: FEE_NOTE, to: feeTo };
+    const rel = releaseWitness({ held: held!, deployment: d.deploymentId, tree: alice.tree, asOf: await blockTime(), sk: parked.payout.sk, relayFee: fee });
     const relProof = await (await proverSet.get("release")).prove(rel.inputs);
     await waitJob(await submitRelay("release", relayBody(relProof.proof, rel.publicInputs)));
     await waitSynced();
-    await alice.noteOf(7n * USD);
+    await alice.noteOf(7n * USD - FEE_NOTE);
 
     const note = (await alice.notes()).find((n) => n.asset === BigInt(asset) && n.value >= 12n * USD && n.keys.pk.x === alice.main.pk.x);
     assert(note !== undefined, "a main-address note to spend");
     const tokenBefore = await c.client.readContract({ address: asset, abi: erc20Abi, functionName: "balanceOf", args: [aliceEoa] });
-    const relayerInfo = await getJson<{ address: { auth: string; pk: { x: string; y: string } } }>(`${RELAY}/v1/relayer`);
-    const feeTo = { auth: BigInt(relayerInfo.address.auth), pk: { x: BigInt(relayerInfo.address.pk.x), y: BigInt(relayerInfo.address.pk.y) } };
     const noFee = spendWitness({ keys: note!.keys, deployment: d.deploymentId, tree: alice.tree, asset: BigInt(asset), inputs: [note!], outputs: [{ value: note!.value - 11n * USD, to: addressOf(alice.main) }], withdraw: { amount: 11n * USD, recipient: BigInt(aliceEoa) } });
     const noFeeProof = await (await proverSet.get("spend")).prove(noFee.inputs);
     const refused = await fetch(`${RELAY}/v1/relay/spend`, { method: "POST", headers: { "content-type": "application/json" }, body: relayBody(noFeeProof.proof, noFee.publicInputs) });
@@ -697,14 +749,14 @@ async function main(): Promise<void> {
     const spendProof = await (await proverSet.get("spend")).prove(spendFee.inputs);
     await waitJob(await submitRelay("spend", relayBody(spendProof.proof, spendFee.publicInputs)));
     const relayerWallet = new ShieldedWallet(RELAYER_FEE_SEED, d.deploymentId);
-    await waitFor("the relayer's fee note, spendable from its own seed", async () => {
+    await waitFor("the relayer's fee notes from the release and the spend, spendable from its own seed", async () => {
       await alice.refresh();
       const feeNotes = relayerWallet.notes(alice.records, alice.deposits, alice.processed, () => false);
-      return feeNotes.some((n) => n.value === FEE_NOTE && n.asset === BigInt(asset)) || null;
+      return feeNotes.filter((n) => n.value === FEE_NOTE && n.asset === BigInt(asset)).length >= 2 || null;
     }, 60_000);
     const tokenAfter = await c.client.readContract({ address: asset, abi: erc20Abi, functionName: "balanceOf", args: [aliceEoa] });
     assert(tokenAfter - tokenBefore === 11n * USD, "withdrawal paid to the recipient", { tokenBefore, tokenAfter });
-    return { released: 7n * USD, withdrawn: 11n * USD };
+    return { released: 7n * USD - FEE_NOTE, releaseFee: FEE_NOTE, withdrawn: 11n * USD };
   });
 
   const aliceKStart = 13;
@@ -720,16 +772,25 @@ async function main(): Promise<void> {
     await waitFor(`note of ${value}`, async () => (await alice.notes()).some((n) => n.asset === BigInt(assetAddr) && n.value === value) || null, 90_000);
   };
   const spotPayouts: WalletKeys[] = [];
+  const priceBand = (b: { lo: bigint; hi: bigint }): { priceLo: bigint; priceHi: bigint } => ({ priceLo: b.lo, priceHi: b.hi });
+  /** A band ten times above the pool price, which the removal can never run in. */
+  const farBand = (b: { lo: bigint; hi: bigint }): { lo: bigint; hi: bigint } => ({ lo: b.lo * 10n, hi: b.hi * 10n });
+  const protocolBps = new Map<bigint, bigint>([[1n, 0n], [2n, 0n]]);
   const quote = (body: unknown): Promise<{ amountOut: string; priceImpactBps: number; hops: number }> => getJson(`${READ}/v1/spot/quote`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  /** Pool price band for an add or a removal: the model's price (or the deposit's own ratio on an empty pool) widened by 1%. */
+  const bandAt = (poolId: bigint, amount0: bigint, amount1: bigint): { lo: bigint; hi: bigint } => {
+    const m = model.get(poolId)!;
+    return m.supply === 0n ? bandForDeposit(amount0, amount1, 100) : bandForDeposit(m.r0, m.r1, 100);
+  };
   const lpLocks = async (poolId: bigint, token0: Address, amount0: bigint, token1: Address, amount1: bigint, link: bigint): Promise<WalletKeys> => {
     await waitSynced();
-    const a = await alice.placeLock(amount0, lpTerms(poolId, 0n, 1n, link), await LP_EXPIRY(), { asset: token0 });
-    await waitJob(a.jobId);
+    const pair = await alice.placeLockPair(poolId, link, bandAt(poolId, amount0, amount1), await LP_EXPIRY(), token0, amount0, token1, amount1);
+    await waitJob(pair.jobId);
     await waitSynced();
-    const b = await alice.placeLock(amount1, lpTerms(poolId, 1n, 1n, link), await LP_EXPIRY(), { asset: token1, payoutIndex: a.held.payoutIndex });
-    await waitJob(b.jobId);
-    await waitSynced();
-    return a.payout;
+    await alice.refresh();
+    const leaves = alice.wallet.ownLocks(alice.records).filter((l) => pair.records.some((r) => r.recNonce === l.record.recNonce)).map((l) => l.leafIndex).sort((a, b) => a - b);
+    assert(leaves.length === 2 && leaves[1] === leaves[0]! + 1, "lockPair writes the two LP locks at adjacent leaves", leaves);
+    return pair.payout;
   };
   const doSwap = async (poolId: bigint, second: bigint, assetIn: Address, assetOut: Address, amount: bigint, minOut: bigint, expirySeconds = 3_600n): Promise<{ payout: WalletKeys; out: bigint; leaf: { record: LockRecord } }> => {
     let amountOutModel = amount;
@@ -740,7 +801,8 @@ async function main(): Promise<void> {
       const zeroForOne = cur === tokens[0];
       const [rIn, rOut] = zeroForOne ? [p.r0, p.r1] : [p.r1, p.r0];
       const out = amountOut(amountOutModel, rIn, rOut, FEE_BPS);
-      if (zeroForOne) { p.r0 += amountOutModel; p.r1 -= out; } else { p.r1 += amountOutModel; p.r0 -= out; }
+      const kept = amountOutModel - protocolCut(amountOutModel, FEE_BPS, protocolBps.get(id)!);
+      if (zeroForOne) { p.r0 += kept; p.r1 -= out; } else { p.r1 += kept; p.r0 -= out; }
       amountOutModel = out;
       cur = zeroForOne ? tokens[1]! : tokens[0]!;
     }
@@ -754,12 +816,12 @@ async function main(): Promise<void> {
   await step("spot: the coordinator seeds both pools from linked LP locks submitted through the relayer", async () => {
     const payout1 = await lpLocks(1n, asset, 10_000n * USD, tokenA, 1_000n * WAD, 1_001n);
     await waitFor("pool 1 seeded", async () => (await getJson<{ pools: { id: string; seeded: boolean }[] }>(`${READ}/v1/spot/pools`)).pools.find((p) => p.id === "1")?.seeded || null, 120_000);
-    const o1 = lpAddOutcome(10_000n * USD, 1_000n * WAD, { r0: 0n, r1: 0n, supply: 0n, lastLeaf: 0n, blind: 0n });
+    const o1 = lpAddOutcome(10_000n * USD, 1_000n * WAD, EMPTY_POOL);
     model.set(1n, { r0: o1.used0, r1: o1.used1, supply: o1.supply });
     await waitFor("LP claim", async () => (await alice.lpFor(payout1)).length === 1 || null, 60_000);
     const payout2 = await lpLocks(2n, tokenA, 1_000n * WAD, tokenB, 2_000n * WAD, 1_002n);
     await waitFor("pool 2 seeded", async () => (await getJson<{ pools: { id: string; seeded: boolean }[] }>(`${READ}/v1/spot/pools`)).pools.find((p) => p.id === "2")?.seeded || null, 120_000);
-    const o2 = lpAddOutcome(1_000n * WAD, 2_000n * WAD, { r0: 0n, r1: 0n, supply: 0n, lastLeaf: 0n, blind: 0n });
+    const o2 = lpAddOutcome(1_000n * WAD, 2_000n * WAD, EMPTY_POOL);
     model.set(2n, { r0: o2.used0, r1: o2.used1, supply: o2.supply });
     await waitFor("second LP claim", async () => (await alice.lpFor(payout2)).length === 1 || null, 60_000);
     spotPayouts.push(payout1, payout2);
@@ -789,12 +851,36 @@ async function main(): Promise<void> {
     return { out, swaps: await counter("coordinator", "spot_swap") };
   });
 
+  await step("spot: a protocol share set through the timelock accrues on a swap and is swept to the fee address as a shielded note", async () => {
+    const feeWallet = new ShieldedWallet(LOCAL_SCALARS.fee, d.deploymentId);
+    const feeNotes = async (): Promise<bigint[]> => {
+      await alice.refresh();
+      return feeWallet.notes(alice.records, alice.deposits, alice.processed, () => false).filter((n) => n.asset === BigInt(asset)).map((n) => n.value);
+    };
+    const before = await feeNotes();
+    await governed(d.spot, encodeFunctionData({ abi: spotGovernanceAbi, functionName: "setProtocolShare", args: [1n, 2_500n] }));
+    protocolBps.set(1n, 2_500n);
+    const sweepsBefore = await counter("coordinator", "protocolSweeps");
+    const { out } = await doSwap(1n, 0n, asset, tokenA, 100n * USD, 1n);
+    await noteArrives(tokenA, out);
+    const cut = protocolCut(100n * USD, FEE_BPS, 2_500n);
+    await waitFor("the coordinator to sweep the accrual", async () => (await counter("coordinator", "protocolSweeps")) > sweepsBefore || null, 120_000);
+    await waitSynced();
+    const after = await waitFor("the swept note at the fee address", async () => {
+      const notes = await feeNotes();
+      return notes.filter((v) => v === cut).length > before.filter((v) => v === cut).length ? notes : null;
+    }, 60_000);
+    await governed(d.spot, encodeFunctionData({ abi: spotGovernanceAbi, functionName: "setProtocolShare", args: [1n, 0n] }));
+    protocolBps.set(1n, 0n);
+    return { protocolBps: 2_500, cut, feeNotes: after.length };
+  });
+
   await step("spot: LP add then removal through a signed request pays out both tokens", async () => {
     const before = await counter("coordinator", "spot_add");
     const payout = await lpLocks(1n, asset, 5_000n * USD, tokenA, 1_000n * WAD, 1_003n);
     await waitFor("add executed", async () => (await counter("coordinator", "spot_add")) > before || null, 90_000);
     const m = model.get(1n)!;
-    const outcome = lpAddOutcome(5_000n * USD, 1_000n * WAD, { r0: m.r0, r1: m.r1, supply: m.supply, lastLeaf: 0n, blind: 0n });
+    const outcome = lpAddOutcome(5_000n * USD, 1_000n * WAD, { ...EMPTY_POOL, r0: m.r0, r1: m.r1, supply: m.supply });
     model.set(1n, { r0: m.r0 + outcome.used0, r1: m.r1 + outcome.used1, supply: outcome.supply });
     const [lp] = await waitFor("LP claim", async () => {
       const list = await alice.lpFor(payout);
@@ -804,7 +890,7 @@ async function main(): Promise<void> {
     await waitSynced();
     await alice.refresh();
     const keys: readonly [{ x: bigint; y: bigint }, { x: bigint; y: bigint }, { x: bigint; y: bigint }] = [alice.coordinatorKey, ...(await readRiskKeys())];
-    const w = lpSetWitness({ claim: lp!.claim, leafIndex: lp!.leafIndex, deployment: d.deploymentId, tree: alice.tree, mode: 0n, sk: payout.sk, min0: 1n, min1: 1n, expiry: await LP_EXPIRY(), asOf: await blockTime(), keys });
+    const w = lpSetWitness({ claim: lp!.claim, leafIndex: lp!.leafIndex, deployment: d.deploymentId, tree: alice.tree, mode: 0n, sk: payout.sk, ...priceBand(bandAt(1n, 0n, 0n)), expiry: await LP_EXPIRY(), asOf: await blockTime(), keys });
     const proof = await (await proverSet.get("lp_set")).prove(w.inputs);
     const beforeRemove = await counter("coordinator", "spot_remove");
     await waitJob(await submitRelay("setLiquidityRequest", relayBody(proof.proof, w.publicInputs)));
@@ -840,12 +926,12 @@ async function main(): Promise<void> {
       return list.length === 1 ? list : null;
     }, 90_000);
     const m = model.get(1n)!;
-    const outcome = lpAddOutcome(2_000n * USD, 200n * WAD, { r0: m.r0, r1: m.r1, supply: m.supply, lastLeaf: 0n, blind: 0n });
+    const outcome = lpAddOutcome(2_000n * USD, 200n * WAD, { ...EMPTY_POOL, r0: m.r0, r1: m.r1, supply: m.supply });
     model.set(1n, { r0: m.r0 + outcome.used0, r1: m.r1 + outcome.used1, supply: outcome.supply });
     await waitSynced();
     await alice.refresh();
     const keys: readonly [{ x: bigint; y: bigint }, { x: bigint; y: bigint }, { x: bigint; y: bigint }] = [alice.coordinatorKey, ...(await readRiskKeys())];
-    const w = lpSetWitness({ claim: lp!.claim, leafIndex: lp!.leafIndex, deployment: d.deploymentId, tree: alice.tree, mode: 0n, sk: payout.sk, min0: 10n ** 24n, min1: 1n, expiry: (await blockTime()) + 60n, asOf: await blockTime(), keys });
+    const w = lpSetWitness({ claim: lp!.claim, leafIndex: lp!.leafIndex, deployment: d.deploymentId, tree: alice.tree, mode: 0n, sk: payout.sk, ...priceBand(farBand(bandAt(1n, 0n, 0n))), expiry: (await blockTime()) + 60n, asOf: await blockTime(), keys });
     const proof = await (await proverSet.get("lp_set")).prove(w.inputs);
     await waitJob(await submitRelay("setLiquidityRequest", relayBody(proof.proof, w.publicInputs)));
     await waitSynced();
@@ -880,14 +966,14 @@ async function main(): Promise<void> {
       return list.length === 1 ? list : null;
     }, 90_000);
     const m = model.get(2n)!;
-    const added = lpAddOutcome(400n * WAD, 800n * WAD, { r0: m.r0, r1: m.r1, supply: m.supply, lastLeaf: 0n, blind: 0n });
+    const added = lpAddOutcome(400n * WAD, 800n * WAD, { ...EMPTY_POOL, r0: m.r0, r1: m.r1, supply: m.supply });
     model.set(2n, { r0: m.r0 + added.used0, r1: m.r1 + added.used1, supply: added.supply });
     assert(lp!.claim.shares === added.shares, "shares match the model", { got: lp!.claim.shares, want: added.shares });
 
     await waitSynced();
     await alice.refresh();
     const keys: readonly [{ x: bigint; y: bigint }, { x: bigint; y: bigint }, { x: bigint; y: bigint }] = [alice.coordinatorKey, ...(await readRiskKeys())];
-    const set = lpSetWitness({ claim: lp!.claim, leafIndex: lp!.leafIndex, deployment: d.deploymentId, tree: alice.tree, mode: 0n, sk: payout.sk, min0: 1n, min1: 1n, expiry: await LP_EXPIRY(), asOf: await blockTime(), keys });
+    const set = lpSetWitness({ claim: lp!.claim, leafIndex: lp!.leafIndex, deployment: d.deploymentId, tree: alice.tree, mode: 0n, sk: payout.sk, ...priceBand(bandAt(2n, 0n, 0n)), expiry: await LP_EXPIRY(), asOf: await blockTime(), keys });
     const proof = await (await proverSet.get("lp_set")).prove(set.inputs);
     const removeBefore = await spotSum("spot_remove");
     await waitJob(await submitRelay("setLiquidityRequest", relayBody(proof.proof, set.publicInputs)));
@@ -924,11 +1010,11 @@ async function main(): Promise<void> {
   });
 
   const poolInfo = async (id: bigint): Promise<PoolInfo> => {
-    const p = (await c.client.readContract({ address: d.spot, abi, functionName: "pool", args: [id] })) as { token0: Address; token1: Address; feeBps: bigint; head: Hex };
+    const p = (await c.client.readContract({ address: d.spot, abi, functionName: "pool", args: [id] })) as { token0: Address; token1: Address; feeBps: bigint; protocolBps: bigint; head: Hex };
     const events = await c.client.getContractEvents({ address: d.spot, abi, eventName: "PoolUpdated", args: { pool: id }, fromBlock: 0n });
     const last = events.at(-1);
-    const state: PoolState = last ? openPoolState((last.args as unknown as { ciphertext: Hex[] }).ciphertext.map(BigInt).slice(0, 7), LOCAL_SCALARS.coordinator) : EMPTY_POOL;
-    return { id, token0: BigInt(p.token0), token1: BigInt(p.token1), feeBps: p.feeBps, state, head: BigInt(p.head) };
+    const state: PoolState = last ? openPoolState((last.args as unknown as { ciphertext: Hex[] }).ciphertext.map(BigInt).slice(0, POOL_CT_LEN), LOCAL_SCALARS.coordinator) : EMPTY_POOL;
+    return { id, token0: BigInt(p.token0), token1: BigInt(p.token1), feeBps: p.feeBps, protocolBps: p.protocolBps, state, head: BigInt(p.head) };
   };
   const operatorProof = async (record: LockRecord): Promise<{ proof: Uint8Array; publicInputs: unknown }> => {
     await alice.refresh();
@@ -997,7 +1083,7 @@ async function main(): Promise<void> {
     const p = await openViaLock(100n, 12n * USD, WAD, 101n * WAD);
     await setPrice(70n, d.thirdFeed);
     await waitFor("liquidation in the created market", async () => (await alice.spent(p.pair.nullifier)) || null, 120_000);
-    await waitFor("the shortfall folded", async () => (await marketView(100n)).oiPending === "0" || null, 120_000);
+    await waitFor("the shortfall folded", async () => (await marketView(100n)).deltasPending === "0" || null, 120_000);
     const redeemedBefore = await spotSum("claimsRedeemed");
     await waitFor("the winner paid from the bond with no action", async () => (await spotSum("claimsRedeemed")) > redeemedBefore || null, 180_000);
 
@@ -1015,7 +1101,7 @@ async function main(): Promise<void> {
     await waitSynced();
     const before = await counter("relayer", "rebroadcasts");
     await setAutomine(false);
-    const lock = await alice.placeLock(4n * USD, takerTerms(1n, false, WAD, 1n), (await blockTime()) + 20n * 86_400n);
+    const lock = await alice.placeLock(4n * USD, takerTerms(1n, false, WAD, 1n), (await blockTime()) + TAKER_LOCK_TTL);
     const job = await getJson<{ tx: Hex }>(`${RELAY}/v1/jobs/${lock.jobId}`);
     await rpc("anvil_dropTransaction", [job.tx]);
     await waitFor("relayer to rebroadcast", async () => (await counter("relayer", "rebroadcasts")) > before || null, 60_000);
@@ -1041,7 +1127,7 @@ async function main(): Promise<void> {
     const snapshot = await rpc<string>("evm_snapshot");
     const baseline = await syncView();
     const head0 = BigInt(baseline.syncedBlock);
-    const lock = await alice.placeLock(9n * USD, takerTerms(1n, false, WAD, 1n), (await blockTime()) + 20n * 86_400n);
+    const lock = await alice.placeLock(9n * USD, takerTerms(1n, false, WAD, 1n), (await blockTime()) + TAKER_LOCK_TTL);
     await waitJob(lock.jobId);
     const before = await waitSynced();
     assert(before.queueLength > baseline.queueLength, "the lock is on the read API before the reorg");
@@ -1125,9 +1211,14 @@ async function main(): Promise<void> {
       }, 180_000);
     }
 
-    const guardian = c.wallet(stack.keys.deployer);
-    const schedule = await guardian.writeContract({ address: d.markets, abi, functionName: "scheduleKeyRotation", args: [{ coordinator: newKeys.coordinator, riskA: newKeys.riskA, riskB: newKeys.riskB }], chain: foundry });
-    await c.client.waitForTransactionReceipt({ hash: schedule });
+    // Each new key holder proves possession for the epoch the set would start (#18), and the timelock schedules it.
+    const epoch = ((await c.client.readContract({ address: d.markets, abi, functionName: "keyEpoch" })) as bigint) + 1n;
+    const popProver = await proverSet.get("key_pop");
+    const pops: Hex[] = [];
+    for (const [i, sk] of [scalars.coordinator, scalars.riskA, scalars.riskB].entries()) {
+      pops.push(bytesToHex((await popProver.prove(keyPopWitness({ encSk: sk, deployment: d.deploymentId, epoch, slot: BigInt(i) }).inputs)).proof));
+    }
+    await governed(d.markets, encodeFunctionData({ abi, functionName: "scheduleKeyRotation", args: [{ coordinator: newKeys.coordinator, riskA: newKeys.riskA, riskB: newKeys.riskB }, pops] }));
     await rpc("evm_increaseTime", [86_401]);
     await mine(1);
     await setPrice(100n);
@@ -1136,6 +1227,11 @@ async function main(): Promise<void> {
     assert((await c.client.waitForTransactionReceipt({ hash: activate })).status === "success", "activation landed");
     const liveRisk = await readRiskKeys();
     assert(liveRisk[0].x === newKeys.riskA.x, "the contract now holds the new risk key");
+    // A funding settlement may have made a new version of the old position just before activation, still under the old keys;
+    // the migration then waits out that version's update cooldown like any keyless update (#5).
+    await warp(601);
+    await setPrice(100n);
+    await setPrice(100n, otherFeed);
 
     for (const n of ["risk-a", "risk-b", "coordinator"] as ServiceName[]) {
       await waitFor(`${n} to see the new key as current`, async () => {
@@ -1185,7 +1281,7 @@ async function main(): Promise<void> {
     const insured = await openViaLock(2n, 50n * USD, WAD, 110n * WAD);
     await setPrice(52n, otherFeed);
     await waitFor("market 2 liquidation for insurance", async () => (await alice.spent(insured.pair.nullifier)) || null, 120_000);
-    await waitFor("folded", async () => (await marketView(2n)).oiPending === "0" || null, 120_000);
+    await waitFor("folded", async () => (await marketView(2n)).deltasPending === "0" || null, 120_000);
     await m2Ready();
     await waitFor("market 2 funding fresh again", async () => {
       const m = await marketView(2n);
@@ -1209,7 +1305,7 @@ async function main(): Promise<void> {
       return stale.length > 0 ? stale : null;
     }, 180_000);
     assert(epochs.every(({ e, prev }) => e.index === prev!.index), "the index does not move on a stale oracle epoch", epochs.map((x) => x.e.index));
-    await waitFor("close folded", async () => (await marketView(2n)).oiPending === "0" || null, 240_000);
+    await waitFor("close folded", async () => (await marketView(2n)).deltasPending === "0" || null, 240_000);
     await waitSynced();
     await alice.refresh();
     const feeWallet = new ShieldedWallet(LOCAL_SCALARS.fee, d.deploymentId);
@@ -1252,7 +1348,7 @@ async function main(): Promise<void> {
     // A well-formed request with a bad proof is refused by simulation, costing the relayer nothing.
     await alice.refresh();
     const n = (await alice.notes()).find((x) => x.asset === BigInt(asset))!;
-    const w = lockWitness({ keys: n.keys, deployment: d.deploymentId, tree: alice.tree, asset: BigInt(asset), inputs: [n], amount: USD, terms: takerTerms(1n, false, WAD, 200n * WAD), expiry: (await blockTime()) + 86_400n, coordinator: alice.coordinatorKey, riskKeys: alice.riskKeys, payout: addressOf(lockAddressKeys(ALICE_SEED, 900)), view: alice.main.pk });
+    const w = lockWitness({ keys: n.keys, deployment: d.deploymentId, tree: alice.tree, asset: BigInt(asset), inputs: [n], amount: USD, terms: takerTerms(1n, false, WAD, 200n * WAD), expiry: (await blockTime()) + 86_400n, asOf: await blockTime(), coordinator: alice.coordinatorKey, riskKeys: alice.riskKeys, payout: addressOf(lockAddressKeys(ALICE_SEED, 900)), view: alice.main.pk });
     const forged = await post("/v1/relay/lock", relayBody(new Uint8Array(4096).fill(7), w.publicInputs));
     const forgedReason = await reason(forged);
     assert(forged.status === 422 && forgedReason === "INVALID_PROOF", "a forged proof is refused by simulation with a named reason", { status: forged.status, forgedReason });

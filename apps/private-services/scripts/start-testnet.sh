@@ -8,6 +8,7 @@
 #   rooq-private-maker-seed   shielded wallet seed for the maker service
 #   rooq-private-reward-{a,b}   seeds of the risk workers' shielded reward addresses
 #   rooq-private-relayer-fee   seed of the relayer's shielded fee address (D-05)
+#   rooq-private-relayer-service-token   shared by the relayer and the maker, so the relayer waives the maker's own traffic
 #   rooq-private-{coordinator,risk-a,risk-b}-previous   optional, comma-separated retired scalars during a key rotation (D-24)
 #
 # Holding both risk keys on one machine does not meet LIQ-04's separate failure domains; this script can start a single
@@ -40,7 +41,7 @@ ensure_scalar() {
 }
 
 for k in gas-coordinator gas-risk-a gas-risk-b gas-relayer gas-queue gas-price-relay; do ensure_key "rooq-private-$k"; done
-for k in maker-seed reward-a reward-b relayer-fee; do ensure_scalar "rooq-private-$k"; done
+for k in maker-seed reward-a reward-b relayer-fee relayer-service-token; do ensure_scalar "rooq-private-$k"; done
 
 for k in gas-coordinator gas-risk-a gas-risk-b gas-relayer gas-queue gas-price-relay; do
   echo "$k address $(cast wallet address --private-key "$(keychain "rooq-private-$k")")"
@@ -55,15 +56,16 @@ run() {
 }
 
 run read-api read-api PORT=8710
-# RELAYER_MIN_FEES is asset:amount,...; left empty the relayer accepts spends without a fee note.
-run relayer relayer PORT=8711 RELAYER_TX_KEY="$(keychain rooq-private-gas-relayer)" RELAYER_FEE_SEED="$(keychain rooq-private-relayer-fee)" RELAYER_MIN_FEES="${RELAYER_MIN_FEES:-}"
+# RELAYER_MIN_FEES is asset:amount or action:asset:amount, comma separated; left empty (testnet) every relay fee is zero.
+run relayer relayer PORT=8711 RELAYER_TX_KEY="$(keychain rooq-private-gas-relayer)" RELAYER_FEE_SEED="$(keychain rooq-private-relayer-fee)" RELAYER_MIN_FEES="${RELAYER_MIN_FEES:-}" RELAYER_SERVICE_TOKEN="$(keychain rooq-private-relayer-service-token)"
 run queue queue PORT=8712 QUEUE_TX_KEY="$(keychain rooq-private-gas-queue)"
 run coordinator coordinator PORT=8713 COORDINATOR_SK="$(keychain rooq-private-coordinator)" COORDINATOR_SK_PREVIOUS="$(keychain_optional rooq-private-coordinator-previous)" COORDINATOR_TX_KEY="$(keychain rooq-private-gas-coordinator)"
 run risk-a risk PORT=8714 RISK_ID=A RISK_SK="$(keychain rooq-private-risk-a)" RISK_SK_PREVIOUS="$(keychain_optional rooq-private-risk-a-previous)" RISK_TX_KEY="$(keychain rooq-private-gas-risk-a)" RISK_REWARD_SEED="$(keychain rooq-private-reward-a)"
 run risk-b risk PORT=8715 RISK_ID=B RISK_SK="$(keychain rooq-private-risk-b)" RISK_SK_PREVIOUS="$(keychain_optional rooq-private-risk-b-previous)" RISK_TX_KEY="$(keychain rooq-private-gas-risk-b)" RISK_REWARD_SEED="$(keychain rooq-private-reward-b)"
-run price-relay price-relay PORT=8717 PRICE_RELAY_TX_KEY="$(keychain rooq-private-gas-price-relay)"
+# RELAY_FIXED_FEEDS is feedId:LABEL:price, comma separated: TEST fixed-reference feeds for tokens with no external price.
+run price-relay price-relay PORT=8717 PRICE_RELAY_TX_KEY="$(keychain rooq-private-gas-price-relay)" RELAY_FIXED_FEEDS="${RELAY_FIXED_FEEDS:-}"
 if [ -n "${MAKER_TERMS:-}" ]; then
-  run maker maker PORT=8716 MAKER_SEED="$(keychain rooq-private-maker-seed)"
+  run maker maker PORT=8716 MAKER_SEED="$(keychain rooq-private-maker-seed)" MAKER_RELAYER_TOKEN="$(keychain rooq-private-relayer-service-token)"
 else
   echo "MAKER_TERMS not set: maker service not started"
 fi

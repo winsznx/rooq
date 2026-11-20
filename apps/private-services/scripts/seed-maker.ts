@@ -5,7 +5,7 @@
  *   DEPLOYER_KEY=... MAKER_SEED=... bun run scripts/seed-maker.ts
  */
 import { readFileSync } from "node:fs";
-import { depositOpening, deriveKeys, initCrypto, noteInner, toHex32 } from "@rooq/private-sdk";
+import { depositDerivation, depositOpening, deriveKeys, initCrypto, noteInner, toHex32 } from "@rooq/private-sdk";
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, parseAbi, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -20,6 +20,7 @@ const MAX_NOTIONAL_USD = 160n;
 
 interface Deployment {
   readonly pool: Address;
+  readonly deploymentId: string;
   readonly asset: Address;
   readonly perpFeeds: readonly Address[];
   readonly perpMarketIds: readonly (string | number)[];
@@ -48,11 +49,13 @@ async function confirmed(hash: Hex, label: string): Promise<void> {
 await initCrypto();
 const seed = BigInt(required("MAKER_SEED"));
 const owner = deriveKeys(seed).owner;
+// Same derivation the services' Wallet scans with, bound to this deployment (audit finding on passkey deposit reuse).
+const derivation = depositDerivation(2, BigInt(deployment.deploymentId));
 const count = Number(process.env.NOTE_COUNT ?? deployment.perpFeeds.length);
 
 await confirmed(await wallet.writeContract({ address: deployment.asset, abi: erc20Abi, functionName: "approve", args: [deployment.pool, NOTE_USDG * BigInt(count)] }), "approve");
 for (let k = START_K; k < START_K + count; k++) {
-  const { rho, blind } = depositOpening(seed, k);
+  const { rho, blind } = depositOpening(seed, k, derivation);
   await confirmed(await wallet.writeContract({ address: deployment.pool, abi: poolAbi, functionName: "shield", args: [deployment.asset, NOTE_USDG, toHex32(noteInner(owner, rho, blind)) as Hex] }), `shield ${k}`);
 }
 

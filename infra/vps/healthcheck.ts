@@ -1,7 +1,7 @@
-/** Checks each `rooq@` unit on this host against its loopback /health. Only public health fields are printed. */
+/** Checks each `rooq@` unit on this host against its own /health. Only public health fields are printed. */
 import { execFileSync } from "node:child_process";
 
-const OFFSET: Readonly<Record<string, number>> = { "read-api": 0, relayer: 1, queue: 2, coordinator: 3, "risk-a": 4, "risk-b": 5, maker: 6, "price-relay": 7 };
+const OFFSET: Readonly<Record<string, number>> = { "read-api": 0, relayer: 1, queue: 2, coordinator: 3, "risk-a": 4, "risk-b": 5, maker: 6, "price-relay": 7, analytics: 8 };
 const BASE = Number(process.env.PRIVATE_BASE_PORT ?? 8710);
 
 interface Health {
@@ -21,8 +21,14 @@ function units(): { name: string; active: string }[] {
   });
 }
 
+/** Units that serve the Docker-hosted Caddy listen on the bridge address their drop-in sets, not loopback. */
+function bindHost(name: string): string {
+  const env = execFileSync("systemctl", ["show", `rooq@${name}`, "--property=Environment", "--value"], { encoding: "utf8" });
+  return /(?:^|\s)BIND_HOST=(\S+)/.exec(env)?.[1] ?? "127.0.0.1";
+}
+
 async function health(name: string): Promise<{ http: number; body: Health | null }> {
-  const res = await fetch(`http://127.0.0.1:${BASE + (OFFSET[name] ?? 0)}/health`, { signal: AbortSignal.timeout(5_000) }).catch(() => null);
+  const res = await fetch(`http://${bindHost(name)}:${BASE + (OFFSET[name] ?? 0)}/health`, { signal: AbortSignal.timeout(5_000) }).catch(() => null);
   if (!res) return { http: 0, body: null };
   return { http: res.status, body: (await res.json()) as Health };
 }
@@ -38,7 +44,7 @@ for (const { name, active } of found) {
   const ok = active.startsWith("active") && http === 200 && body?.blocked === null;
   if (!ok) bad++;
   console.log(`${ok ? "ok  " : "FAIL"} ${name.padEnd(12)} ${active.padEnd(16)} http=${http} status=${body?.status ?? "-"} lag=${body?.lagBlocks ?? "-"} blocked=${body?.blocked ?? "-"}${body?.lastError ? ` error=${body.lastError.message}` : ""}`);
-  for (const f of body?.feeds ?? []) console.log(`       ${f.symbol.padEnd(5)} age=${f.ageSeconds}s fresh=${f.fresh}${f.lastSkip ? ` skip=${f.lastSkip}` : ""}`);
+  for (const f of Array.isArray(body?.feeds) ? body.feeds : []) console.log(`       ${f.symbol.padEnd(5)} age=${f.ageSeconds}s fresh=${f.fresh}${f.lastSkip ? ` skip=${f.lastSkip}` : ""}`);
   if (body?.gasBalanceWei) console.log(`       relay gas balance ${body.gasBalanceWei} wei`);
 }
 process.exit(bad === 0 ? 0 : 1);

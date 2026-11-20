@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Deploys the private pairs candidate to Robinhood Chain testnet (46630) and verifies it on Sourcify.
+# Governance (the 48h timelock, the 2-of-3 Safe and the 1-of-3 veto Safe) must already exist: DeployGovernance.s.sol writes
+# contracts/deployments/governance-46630.json, and the deploy refuses holders that don't match it.
 # Keys live in the macOS Keychain and only ever reach this process's environment:
 #   rooq-testnet-46630-deployer, rooq-private-coordinator, rooq-private-risk-a, rooq-private-risk-b, rooq-private-fee
 # Risk and coordinator keys are created on first use. Holding both risk keys on one machine does not meet LIQ-04's
@@ -36,6 +38,12 @@ eval "$(cd "$ROOT/e2e" && COORDINATOR_SK="$(keychain rooq-private-coordinator)" 
 : "${COORDINATOR_X:?could not derive public keys}" "${RISK_A_X:?}" "${RISK_B_X:?}" "${FEE_AUTH:?}"
 export COORDINATOR_X COORDINATOR_Y RISK_A_X RISK_A_Y RISK_B_X RISK_B_Y FEE_AUTH FEE_X FEE_Y
 export PRIVACY_ASSET="$USDG" PRIVACY_OUT="./deployments/privacy-46630.json"
+
+GOVERNANCE="$ROOT/contracts/deployments/governance-46630.json"
+[ -f "$GOVERNANCE" ] || { echo "no $GOVERNANCE; run DeployGovernance.s.sol first"; exit 1; }
+gov() { python3 -I -c 'import json,sys; v=json.load(open(sys.argv[1]))[sys.argv[2]]; print(",".join(v) if isinstance(v, list) else v)' "$GOVERNANCE" "$1"; }
+export TIMELOCK GUARDIAN_SAFE VETO_SAFE SAFE_OWNERS
+TIMELOCK="$(gov timelock)" GUARDIAN_SAFE="$(gov safe)" VETO_SAFE="$(gov vetoSafe)" SAFE_OWNERS="$(gov safeOwners)"
 export PRIVACY_RELAY_OPERATOR; PRIVACY_RELAY_OPERATOR="$(cast wallet address --private-key "$(keychain rooq-private-gas-price-relay)")"
 AMZN=0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02
 PLTR=0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0
@@ -53,6 +61,16 @@ export PRIVACY_TIER_COUNT
 deployer="$(cast wallet address --private-key "$DEPLOYER_PRIVATE_KEY")"
 echo "deployer $deployer balance $(cast balance "$deployer" --rpc-url "$RPC" --ether) ETH"
 cd "$ROOT/contracts"
+
+# Each genesis key holder proves possession against the custody address this deploy will create (audit #18). The prediction
+# holds only while nothing else is sent from the deployer key before the broadcast below. Every key lives on this machine for
+# testnet, so the proofs are made here; on mainnet each holder runs `pnpm --filter @rooq/private-services key-pop` on its own host.
+export PRIVACY_POP_DIR="deployments/key-pop-46630"
+DEPLOYMENT_ID="$(forge script script/DeployPrivatePairs.s.sol --rpc-url "$RPC" --sig 'predictCustody()' 2>&1 | awk '/deploymentId/ {print $2}' | tail -1)"
+: "${DEPLOYMENT_ID:?could not predict the custody address}"
+rm -rf "$PRIVACY_POP_DIR"
+(cd "$ROOT/apps/private-services" && COORDINATOR_SK="$(keychain rooq-private-coordinator)" RISK_A_SK="$(keychain rooq-private-risk-a)" RISK_B_SK="$(keychain rooq-private-risk-b)" FEE_SEED="$(keychain rooq-private-fee)" \
+  bun run src/key-pop.ts --deployment "$DEPLOYMENT_ID" --epoch 0 --out "$ROOT/contracts/$PRIVACY_POP_DIR")
 
 web_env() {
   python3 -I - "$ROOT/contracts/deployments/privacy-46630.json" <<'PY'

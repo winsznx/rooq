@@ -1,8 +1,8 @@
-import { FIELD, LOCK_CT_LEN, LP_CT_LEN, NOTE_CT_LEN, PAIR_CT_LEN, PAIR_RECIPIENTS } from "@rooq/private-sdk";
+import { FIELD, LOCK_CT_LEN, LP_CT_LEN, NOTE_CT_LEN, PAIR_CT_LEN, PAIR_RECIPIENTS, POOL_CT_LEN } from "@rooq/private-sdk";
 import { getAddress, isAddress, type Hex } from "viem";
 import { ServiceError } from "./errors";
 
-export const RELAY_ACTIONS = ["lock", "spend", "updatePair", "closePair", "requestExit", "release", "redeemClaim", "swap", "addLiquidity", "setLiquidityRequest", "removeLiquidity"] as const;
+export const RELAY_ACTIONS = ["lock", "lockPair", "spend", "updatePair", "closePair", "requestExit", "release", "redeemClaim", "swap", "addLiquidity", "setLiquidityRequest", "removeLiquidity"] as const;
 export type RelayAction = (typeof RELAY_ACTIONS)[number];
 
 export const isRelayAction = (x: string): x is RelayAction => (RELAY_ACTIONS as readonly string[]).includes(x);
@@ -11,9 +11,20 @@ export const isRelayAction = (x: string): x is RelayAction => (RELAY_ACTIONS as 
 export const MAX_PROOF_BYTES = 32 * 1024;
 export const MAX_BODY_BYTES = 256 * 1024;
 
+/** Sent by operator services (the maker) so the relayer waives their own traffic instead of charging the free allowance. */
+export const SERVICE_TOKEN_HEADER = "x-rooq-service-token";
+
+/** The service token travels in a header, so it may only go to the relayer over https or without leaving the host. */
+export function serviceTokenTransportAllowed(relayerUrl: string): boolean {
+  const url = new URL(relayerUrl);
+  if (url.protocol === "https:") return true;
+  if (url.protocol !== "http:") return false;
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  return host === "localhost" || host === "::1" || /^127(\.\d{1,3}){3}$/.test(host);
+}
+
 type Shape = "field" | "uint" | "address" | Shape[] | { readonly [k: string]: Shape };
 
-const POOL_CT_LEN = 7;
 const array = (n: number, s: Shape): Shape[] => Array.from({ length: n }, () => s);
 const noteCt = array(NOTE_CT_LEN, "field");
 const twoNotes = array(2, "field");
@@ -22,14 +33,22 @@ const three: Shape = array(3, "field");
 const threeNoteCts = array(3, noteCt);
 const poolCts = array(3, array(POOL_CT_LEN, "field"));
 const lpCts = array(4, array(LP_CT_LEN, "field"));
+const feeOut: Shape = { commitment: "field", ct: noteCt };
+const lockShape: Shape = {
+  root: "field", nullifiers: twoNotes, changeCommitment: "field", lockCommitment: "field", changeCt: noteCt, ownerCt: array(LOCK_CT_LEN, "field"), coordinatorCt: array(LOCK_CT_LEN, "field"),
+  riskCt: array(2, array(LOCK_CT_LEN, "field")), asOf: "uint", relayFee: feeOut,
+};
 
-const SHAPES: Record<Exclude<RelayAction, "requestExit">, Shape> = {
-  lock: { root: "field", nullifiers: twoNotes, changeCommitment: "field", lockCommitment: "field", changeCt: noteCt, ownerCt: array(LOCK_CT_LEN, "field"), coordinatorCt: array(LOCK_CT_LEN, "field"), riskCt: array(2, array(LOCK_CT_LEN, "field")) },
+const SHAPES: Record<Exclude<RelayAction, "requestExit" | "lockPair">, Shape> = {
+  lock: lockShape,
   spend: { root: "field", nullifiers: twoNotes, commitments: three, ciphertexts: threeNoteCts, publicAsset: "address", withdrawAmount: "uint", withdrawRecipient: "address", relayer: "address", relayerFee: "uint" },
-  updatePair: { root: "field", nullifiers: twoNotes, pairCommitment: "field", outCommitment: "field", feeCommitment: "field", pairCt: pairCts, outCt: noteCt, feeCt: noteCt, market: "uint", deltaCommitment: "field", carriedNullifier: "field" },
-  closePair: { root: "field", nullifier: "field", commitments: three, ciphertexts: threeNoteCts, market: "uint", deltaCommitment: "field", mode: "uint" },
-  release: { root: "field", nullifier: "field", commitment: "field", ciphertext: noteCt, asOf: "uint" },
-  redeemClaim: { root: "field", nullifier: "field", commitment: "field", ciphertext: noteCt, deltaCommitment: "field" },
+  updatePair: {
+    root: "field", nullifiers: twoNotes, pairCommitment: "field", outCommitment: "field", feeCommitment: "field", pairCt: pairCts, outCt: noteCt, feeCt: noteCt, market: "uint", deltaCommitment: "field",
+    carriedNullifier: "field", asOf: "uint", relayFee: feeOut,
+  },
+  closePair: { root: "field", nullifier: "field", commitments: three, ciphertexts: threeNoteCts, market: "uint", deltaCommitment: "field", mode: "uint", relayFee: feeOut },
+  release: { root: "field", nullifier: "field", commitment: "field", ciphertext: noteCt, asOf: "uint", relayFee: feeOut },
+  redeemClaim: { root: "field", nullifier: "field", commitment: "field", ciphertext: noteCt, deltaCommitment: "field", relayFee: feeOut },
   swap: { root: "field", nullifier: "field", outCommitment: "field", outCt: noteCt, asOf: "uint", pool: array(2, "uint"), newHead: twoNotes, poolCt: array(2, poolCts) },
   addLiquidity: { root: "field", nullifiers: twoNotes, newHead: "field", lpCommitment: "field", lpCt: lpCts, refundCommitments: twoNotes, refundCt: array(2, noteCt), poolCt: poolCts, asOf: "uint", pool: "uint" },
   setLiquidityRequest: { root: "field", nullifier: "field", nextCommitment: "field", ct: lpCts, asOf: "uint", mode: "uint" },
@@ -86,26 +105,59 @@ export interface RelayCall {
   readonly nullifiers: readonly Hex[];
 }
 
+/** A FREE note a relayed action creates that may pay the relayer: the relay fee output, or a spend's third output (D-05). */
+export interface FeeOutput {
+  readonly commitment: Hex;
+  readonly ct: readonly Hex[];
+}
+
 const nullifiersOf = (action: RelayAction, inputs: Record<string, unknown>): Hex[] => {
   if (action === "requestExit") return [];
   return "nullifiers" in inputs ? [...(inputs.nullifiers as Hex[])] : [inputs.nullifier as Hex];
 };
 
+const FEE_FIELD_ACTIONS: ReadonlySet<RelayAction> = new Set<RelayAction>(["lock", "updatePair", "closePair", "release", "redeemClaim"]);
+
+/**
+ * The outputs of a parsed call that can pay this relayer (spec-fees.md). Empty for the actions with no fee output: exit
+ * requests, LP requests and the operator-proved spot calls, which draw on the free allowance.
+ */
+export function feeOutputOf(call: RelayCall): FeeOutput[] {
+  if (call.action === "spend") {
+    const p = call.args[1] as { commitments: readonly Hex[]; ciphertexts: readonly (readonly Hex[])[] };
+    return [{ commitment: p.commitments[2]!, ct: p.ciphertexts[2]! }];
+  }
+  if (call.action === "lockPair") return [call.args[1], call.args[3]].map((p) => (p as { relayFee: FeeOutput }).relayFee);
+  if (FEE_FIELD_ACTIONS.has(call.action)) return [(call.args[1] as { relayFee: FeeOutput }).relayFee];
+  return [];
+}
+
 /** Strict: exact field set, exact lengths, canonical field elements. Everything the contract would refuse later is refused here first. */
 export function parseRelayRequest(action: RelayAction, body: Record<string, unknown>): RelayCall {
-  const proof = checkProof(body.proof);
   for (const key of Object.keys(body)) if (key !== "proof" && key !== "publicInputs") reject(key, "is not a known field");
+  if (action === "lockPair") return parseLockPair(body);
+  const proof = checkProof(body.proof);
   if (action === "requestExit") {
     if (typeof body.publicInputs !== "object" || body.publicInputs === null) reject("publicInputs", "must be an object");
     const inputs = validate({ root: "field", nullifier: "field" }, body.publicInputs, "publicInputs") as { root: Hex; nullifier: Hex };
     return { action, functionName: "requestExit", args: [proof, inputs.root, inputs.nullifier], nullifiers: [] };
   }
+
   const inputs = validate(SHAPES[action], body.publicInputs, "publicInputs") as Record<string, unknown>;
   return { action, functionName: action, args: [proof, inputs], nullifiers: nullifiersOf(action, inputs) };
 }
 
+/** Both halves of an LP add in one call, so the contract writes the two locks at adjacent leaves (#8). */
+function parseLockPair(body: Record<string, unknown>): RelayCall {
+  if (!Array.isArray(body.proof) || body.proof.length !== 2) reject("proof", "must be an array of 2");
+  const proofs = (body.proof as unknown[]).map((p) => checkProof(p));
+  const halves = validate([lockShape, lockShape], body.publicInputs, "publicInputs") as Record<string, unknown>[];
+  return { action: "lockPair", functionName: "lockPair", args: [proofs[0], halves[0], proofs[1], halves[1]], nullifiers: halves.flatMap((h) => nullifiersOf("lock", h)) };
+}
+
 /** Wallet-side: turns SDK public inputs into the JSON body. */
-export function encodeRelayBody(proof: Uint8Array, publicInputs: unknown): string {
-  return JSON.stringify({ proof: `0x${Buffer.from(proof).toString("hex")}`, publicInputs }, (_k, v: unknown) => (typeof v === "bigint" ? v.toString() : v));
+export function encodeRelayBody(proof: Uint8Array | readonly Uint8Array[], publicInputs: unknown): string {
+  const hex = (p: Uint8Array): string => `0x${Buffer.from(p).toString("hex")}`;
+  return JSON.stringify({ proof: proof instanceof Uint8Array ? hex(proof) : proof.map(hex), publicInputs }, (_k, v: unknown) => (typeof v === "bigint" ? v.toString() : v));
 }
 

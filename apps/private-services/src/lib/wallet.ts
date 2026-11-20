@@ -1,4 +1,4 @@
-import { deriveKeys, LOCK_CT_LEN, lockAddressKeys, openLock, RECORD_FREE, RECORD_LOCK, scanCreated, scanDeposits, type LockRecord, type OwnedNote, type ShieldedDeposit, type WalletKeys } from "@rooq/private-sdk";
+import { depositDerivation, deriveKeys, LOCK_CT_LEN, lockAddressKeys, openLock, RECORD_FREE, RECORD_LOCK, scanCreated, scanDeposits, type LockRecord, type OwnedNote, type ShieldedDeposit, type WalletKeys } from "@rooq/private-sdk";
 
 export interface WalletRecord {
   readonly leafIndex: number;
@@ -87,7 +87,7 @@ export class ShieldedWallet {
 
   /** Spendable notes among current records, unspent and in the tree. */
   notes(records: readonly WalletRecord[], deposits: readonly ShieldedDeposit[], processed: number, isSpent: (nullifier: bigint) => boolean): SpendableNote[] {
-    const mine: SpendableNote[] = scanDeposits(this.seed, this.main, this.deployment, deposits).map((n) => ({ ...n, keys: this.main }));
+    const mine: SpendableNote[] = scanDeposits(this.seed, this.main, this.deployment, deposits, undefined, depositDerivation(2, this.deployment)).map((n) => ({ ...n, keys: this.main }));
     const free = records.filter((r) => r.kind === RECORD_FREE);
     for (const keys of [this.main, ...this.usedAddresses(records).used]) {
       for (const r of free) {

@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="${1:-$ROOT/dist/rooq-private-$(date -u +%Y%m%dT%H%M%SZ).tar.gz}"
 DEPLOYMENT="${ROOQ_DEPLOYMENT_FILE:-$ROOT/contracts/deployments/privacy-46630.json}"
-ARTIFACTS=(PrivatePairs PrivateSpot PrivateMarkets OracleAdapter AppendVerifier SpendVerifier LockVerifier OpenPairVerifier LiquidateVerifier ReleaseVerifier FundingEpochVerifier ClosePairVerifier ExitRequestVerifier PairUpdateVerifier RedeemClaimVerifier InsuranceSweepVerifier)
+ARTIFACTS=(PrivatePairs PrivateSpot PrivateMarkets OracleAdapter AppendVerifier SpendVerifier LockVerifier OpenPairVerifier LiquidateVerifier ReleaseVerifier FundingEpochVerifier ClosePairVerifier ExitRequestVerifier PairUpdateVerifier RedeemClaimVerifier InsuranceSweepVerifier SweepProtocolVerifier KeyPopVerifier)
 
 python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if int(d["chainId"]) == 46630 and d.get("marketMap") else "deployment file is not a 46630 private deployment with five markets")' "$DEPLOYMENT"
 for a in "${ARTIFACTS[@]}"; do
