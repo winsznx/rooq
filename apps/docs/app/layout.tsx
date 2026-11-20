@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { AnalyticsBeacon } from "@/components/analytics/beacon";
 import { DocsChrome } from "@/components/docs-chrome";
 import { Footer } from "@/components/footer";
 import { DOCS_URL, SITE_NAME } from "@/lib/site";
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <DocsChrome footer={<Footer />}>{children}</DocsChrome>
+        <AnalyticsBeacon />
       </body>
     </html>
   );

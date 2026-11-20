@@ -24,10 +24,11 @@ entry can be reversed by the founder. Anything still marked planned is decided b
 | D-15 | Fees | Paid as shielded notes to a deployment-fixed address | Built |
 | D-16 | Open interest limit with private, lagging OI | Check against the last folded total plus a worst case for everything unfolded | Built |
 | D-17 | Insurance left in a market that has ended | To the fee address after 90 days with no oracle and no positions | Built |
-| D-18 | Spot execution order | Sequential in tree order per pool, so an operator cannot reorder trades | Built |
+| D-18 | Spot execution order | Sequential in tree order per pool. Stops reordering, not front-running by an operator that places its own intents early | Built. LP price bound is a web-app stopgap |
 | D-19 | How swaps and LP actions are authorized | Owner signs bounded intents; the operator can only fill them inside those bounds | Built |
 | D-20 | How spot shares custody with perps | One tree and one vault, separate pool records, no financial path between them | Built |
 | D-21 | How a user gets a private account | Connect a wallet and sign once; the account derives from that signature, with passkey unlock | Working locally in the browser |
+| D-25 | Counting visitors and showing operator metrics | Cookieless hourly page view totals with a local date flag; an owner-only admin of public counts | Built (`apps/web/components/analytics`, `apps/docs/components/analytics`, analytics service); deploy pending |
 | D-22 | Creating markets privately | Permissionless, on fixed risk tiers and approved feeds, with a creator bond behind insurance | Working locally, real proofs |
 | D-23 | Risk workers reading intents | Locks are encrypted to both risk keys as well, so a worker can execute or refund if the coordinator is gone | Working locally for spot and liquidity. Workers don't match perps locks yet |
 
@@ -213,10 +214,20 @@ insurance and any bad debt still recorded.
 ## D-18. Spot ordering
 
 Pools execute one intent at a time, and each pool remembers the tree position of the last intent it ran. An intent can only run
-if it sits later in the tree. The operator therefore cannot reorder trades, and cannot put its own trade ahead of one it has
-already seen, because its own intent would land later in the tree. It can still leave an intent out: that intent cannot run later
-and refunds at expiry, and the trader's minimum output bounds anything else (SPOT-03). The rejected option was free ordering
-limited only by each trader's slippage bound, which leaves room for sandwiching up to that bound.
+if it sits later in the tree, so the operator can't reorder the intents it runs. This doesn't stop front-running. Whoever can
+read pool state (the coordinator and both risk-key holders) can keep its own swap locks waiting at earlier tree positions, run
+one just before a trader's intent, and leave the others to refund at expiry (internal audit 2026-11-14, finding 1). Leaving an
+intent out is always possible: it can't run later and refunds at expiry.
+
+So the owner's bound is what protects a trade. A swap is bounded by its minimum output (SPOT-03). LP adds and removals have no
+price bound in the circuits: lp_add binds only a minimum share count and lp_remove only absolute minimum outputs, and with supply
+and reserves private a wallet can't set those exactly. Until the circuits commit a price band, the web app sets both from an
+indicative pool price and the person's slippage setting, using the fact that each share is backed by at least one unit of
+sqrt(r0 * r1). An operator can then move the price against an LP by about that much at most. The price comes from an operator
+quote, so this is a mitigation, not a guarantee.
+
+The rejected option was free ordering limited only by each trader's slippage bound. Against an operator that places its intents
+in advance, tree ordering ends up giving about the same protection.
 
 Cost: a skipped intent has to be placed again.
 
@@ -269,3 +280,17 @@ The coordinator key and the two risk keys were fixed at construction. They are n
 **Old records keep their key until they move.** A worker holds the current key plus any retired ones (`RISK_SK_PREVIOUS`, `COORDINATOR_SK_PREVIOUS`). Which key opens a record is decided by the record itself, checked against its commitment or the on-chain head, so no history is guessed. Retired keys stay usable as long as any live pair, lock, claim or market record still needs them. A worker migrates live pairs forward on its own with the same keyless update funding settlement uses, which changes no margin or size. The health endpoint reports `retiredKeyRecords`; when that reaches zero on both workers and the coordinator, the retired key can be destroyed. A retired key never needs to be destroyed as an incident response, and doing so while it still has work would strand old records.
 
 **Costs.** One more contract role to guard. Six more storage reads per proof, which is small next to verification. A retired key must be kept available until old records clear, so a compromised retired key keeps its old access until they do: rotation stops new exposure, it does not cut off what the old key could already read. The ciphertext formats and verifiers are unchanged, so a deployment made before this change simply has no rotation and keeps working as before.
+
+## D-25. Page views and the owner-only admin
+
+The founder wanted to see how many people use Rooq and how its own services and wallets are doing, without breaking the policy that Rooq knows as little as possible about the people using it.
+
+**Page views.** The app and the docs send one small beacon per page to `POST /v1/pv` on the analytics service. It carries the site, the route pattern (`/app/perps/[market]`, never the concrete path, query or hash), the cross-site referrer domain on the first page of a load, a device class from the viewport width, and whether this is the first view in this browser on the current UTC day. The service adds it to an hourly total keyed by those fields and keeps nothing else. There are no cookies, no stored or hashed IP, no user agent and no identifier. The rate limiter keeps the IP in memory for one minute, as for every other request (PRIV-01).
+
+**Visits, not unique visitors.** A localStorage key `rooq-pv-day` holds the date of the last counted visit. It is the same value for everyone who visits on a day, so it can't link one visit to another. This gives an honest daily visit count. True unique visitors across days would need an identifier or an IP hash, which the policy rules out, so Rooq doesn't count them. A browser that blocks storage sends `first: null` and its views count without a visit.
+
+**Opting out.** A browser that sends Global Privacy Control or Do Not Track sends nothing, and neither does an automated browser (`navigator.webdriver`). Operator pages under `/admin` aren't counted.
+
+**The admin.** `/admin` signs in with a SIWE message from an allowlisted wallet. Starting a sign-in sets a two-minute signed nonce cookie for whoever presses the button, and a valid signature from an allowlisted wallet sets the session cookie. These are the only cookies Rooq sets. The signature is checked by local ecrecover, so the owner wallets must be EOAs and an unauthenticated caller can't make the sign-in endpoint spend an RPC call. The nonce is stateless, so it is single use only in a browser that drops the cleared cookie. The short expiry bounds a replay. Sign-out drops the browser's cookie, and `ADMIN_SESSION_EPOCH` revokes every session issued before it. Anyone without a session gets a 404 apart from the sign-in view, from the proxy and again from each page. The admin shows public chain data and aggregate counts only. "Users" means distinct public wallets that shielded, unshielded, created a market or sent a user action directly, as a count. Rooq never returns or renders a list of those addresses, because collecting them next to service data drifts toward the linking ADR-P01 avoids. Rooq's own operator wallets are shown by address and label, since admin and guardian actions are public by ADR-P01. No decrypted or private figures appear: no exact reserves or open interest, and nothing per pair or per LP.
+
+**Costs.** The privacy policy and the in-app privacy line used to say "no analytics", so they changed in the same release. A daily visit count undercounts people who block storage and counts one person on two devices twice. The beacon is unauthenticated, so anyone can post made-up referrers or first-of-day flags. Each hour keeps at most 50 referrer hosts and files the rest as "other", which bounds storage and the admin response, but inflated counts from a determined client can't be told apart from real ones. The admin API token sits on the public `api.rooq.trade` host, so it relies on a 256-bit bearer token, a constant-time compare and a rate limit.
