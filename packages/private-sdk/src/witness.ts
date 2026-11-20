@@ -1,5 +1,5 @@
 import { AMOUNT_LIMIT, APPEND_BATCH, FREE_DOMAIN, KIND_DEPOSIT, KIND_LEAF, TREE_DEPTH } from "./constants";
-import type { Point } from "./crypto";
+import { mulGenerator, type Point } from "./crypto";
 import { encrypt } from "./encryption";
 import { randomField, toHex32, type Hex } from "./field";
 import { ownerTag, type PrivateAddress, type WalletKeys } from "./keys";
@@ -170,5 +170,26 @@ export function spendWitness(r: SpendRequest): SpendWitness {
       relayerFee: relayer.fee,
     },
     outputs: built.map((b) => ({ commitment: b.commitment, rho: b.rho, blind: b.blind, value: b.o.value })),
+  };
+}
+
+/** Public inputs of key_pop, in circuit order: deployment, epoch, slot, x, y. */
+export interface KeyPopPublic {
+  readonly deployment: bigint;
+  readonly epoch: bigint;
+  readonly slot: bigint;
+  readonly key: Point;
+}
+
+/**
+ * Proof that whoever schedules an operator or fee key holds its secret: key = sk * G. The contract supplies deployment,
+ * epoch and slot, which bind through the verifier transcript, so the proof can't be replayed for another rotation or slot.
+ */
+export function keyPopWitness(r: { readonly encSk: bigint; readonly deployment: bigint; readonly epoch: bigint; readonly slot: bigint }): { inputs: InputMap; publicInputs: KeyPopPublic } {
+  if (r.encSk === 0n) throw new RangeError("no key");
+  const key = mulGenerator(r.encSk);
+  return {
+    inputs: { sk: f(r.encSk), deployment: f(r.deployment), epoch: f(r.epoch), slot: f(r.slot), x: f(key.x), y: f(key.y) },
+    publicInputs: { deployment: r.deployment, epoch: r.epoch, slot: r.slot, key },
   };
 }

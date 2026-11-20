@@ -4,7 +4,7 @@ import { Noir } from "@noir-lang/noir_js";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   closeOutcome, closeWitness, deriveKeys, foldClaims, fundingEpochWitness, marketHead, oiDeltaCommitment, noteCommitment, noteInner, ownerNullifier, updateWitness, FUNDING_INDEX_ZERO, initCrypto, liquidateWitness, liquidationOutcome, MerkleTree, pairCommitment,
-  type PairRecord, addressOf,
+  type PairRecord, addressOf, MIN_UPDATE_GAP, OI_CLOSE, TAKER_GRACE,
 } from "../src";
 import { circuit } from "./helpers";
 
@@ -36,10 +36,12 @@ function toPair(c: Pick<Base, "size" | "entry" | "fundingSnapshot" | "closeSprea
   const debt = BigInt(c.fundingDebt);
   return {
     market: 7n, asset: ASSET, isShort: size < 0n ? 1n : 0n, size: size < 0n ? -size : size, entry: BigInt(c.entry),
-    fundingIndex: FUNDING_INDEX_ZERO + BigInt(c.fundingSnapshot), closeSpread: BigInt(c.closeSpreadBps), fundingDebt: debt < 0n ? -debt : debt, debtByTaker: debt > 0n ? 1n : 0n, lastReduce: 0n, takerMargin: BigInt(c.takerMargin), makerMargin: BigInt(c.makerMargin),
+    fundingIndex: FUNDING_INDEX_ZERO + BigInt(c.fundingSnapshot), closeSpread: BigInt(c.closeSpreadBps), fundingDebt: debt < 0n ? -debt : debt, debtByTaker: debt > 0n ? 1n : 0n, lastReduce: 0n, updatedAt: 0n, takerMargin: BigInt(c.takerMargin), makerMargin: BigInt(c.makerMargin),
     takerAuth: taker.auth, takerX: taker.pk.x, takerY: taker.pk.y, makerAuth: maker.auth, makerX: maker.pk.x, makerY: maker.pk.y, recNonce: 5n, blind: 6n,
   };
 }
+
+const index = (c: Pick<Base, "fundingIndex">): bigint => FUNDING_INDEX_ZERO + BigInt(c.fundingIndex);
 
 function treeWith(p: PairRecord): MerkleTree {
   const tree = new MerkleTree();
@@ -85,8 +87,8 @@ describe("private settlement against the independent kernel", () => {
       if (folded.ratio < 10n ** 18n) short++;
       const state = { longOi: 0n, shortOi: 0n, insurance, badDebt: 0n, bondUsed: 0n, blind: 77n };
       const deltas = claims.map((claim, i) => {
-        const opening = { isShort: 0n, size: 0n, remove: 1n, recNonce: BigInt(i + 1), claim, insIn: i === 0 ? inflow : 0n };
-        return { opening, commitment: oiDeltaCommitment(DEPLOYMENT, 7n, 0n, 0n, 1n, opening.recNonce, opening.insIn, claim) };
+        const opening = { isShort: 0n, size: 0n, kind: OI_CLOSE, recNonce: BigInt(i + 1), claim, insIn: i === 0 ? inflow : 0n };
+        return { opening, commitment: oiDeltaCommitment(DEPLOYMENT, 7n, 0n, 0n, OI_CLOSE, opening.recNonce, opening.insIn, claim) };
       });
       if (claims.length === 0 && inflow !== 0n) continue;
       const head = marketHead(DEPLOYMENT, 7n, state);
@@ -123,35 +125,54 @@ describe("private settlement against the independent kernel", () => {
     const noir = new Noir(circuit("pair_update"));
     const riskKeys = [maker.pk, worker.pk] as const;
     const reasons = new Map<string, number>();
+    const AS_OF = 1_000_000n;
+    let cured = 0;
     for (const c of cases.privateUpdate) {
-      const pair = toPair(c);
-      const index = FUNDING_INDEX_ZERO + BigInt(c.fundingIndex);
       const [mark, imr, scale, feeBps, actor] = [BigInt(c.mark), BigInt(c.imrWad), BigInt(c.scale), BigInt(c.feeBps), BigInt(c.actor)];
+      // The kernel predates the health rule; maintenance at half of initial is the usual ratio across the vector tiers.
+      const mmrWad = imr / 2n;
       const update = { actor, add: BigInt(c.add), remove: BigInt(c.remove), reduce: BigInt(c.reduce) };
-      const tree = treeWith(pair);
       const value = BigInt(c.noteValue);
       const inner = noteInner(taker.owner, 91n, 92n);
       const commitment = noteCommitment(DEPLOYMENT, ASSET, value, inner);
-      tree.insert(commitment);
       const note = value === 0n ? undefined : { leafIndex: 1, asset: ASSET, value, rho: 91n, blind: 92n, commitment, nullifier: ownerNullifier(taker.nk, commitment) };
-      const w = updateWitness({
-        pair, leafIndex: 0, deployment: DEPLOYMENT, tree, update, sk: actor === 2n ? maker.sk : taker.sk, noteOwner: taker, note,
-        mark, imrWad: imr, scale, feeBps, fundingIndex: index, riskKeys, feeTo: addressOf(worker),
-      });
-      const o = w.outcome;
-      expect(o.refused).toBe(c.refused);
-      expect([o.size, o.fee, o.fundingOwed, o.fundingPaid, o.fundingNetted].map(String)).toEqual([c.nextSize, c.fee, c.fundingOwed, c.fundingPaid, c.fundingNetted]);
-      const debt = BigInt(c.nextFundingDebt);
-      expect(o.fundingDebt).toBe(debt < 0n ? -debt : debt);
-      if (c.refused) {
-        reasons.set(c.refused, (reasons.get(c.refused) ?? 0) + 1);
-        await expect(noir.execute(w.inputs)).rejects.toThrow(c.refused);
-      } else {
-        expect([o.takerMargin, o.makerMargin].map(String)).toEqual([c.nextTakerMargin, c.nextMakerMargin]);
-        await noir.execute(w.inputs);
+      // Outside the cooldown and the taker grace (as the kernel assumes), then again with the previous version stamped at as_of.
+      const outside = AS_OF - MIN_UPDATE_GAP - TAKER_GRACE;
+      for (const updatedAt of [outside, AS_OF]) {
+        const pair = { ...toPair(c), updatedAt };
+        const tree = treeWith(pair);
+        tree.insert(commitment);
+        const w = updateWitness({
+          pair, leafIndex: 0, deployment: DEPLOYMENT, tree, update, sk: actor === 2n ? maker.sk : taker.sk, noteOwner: taker, note,
+          mark, imrWad: imr, mmrWad, scale, feeBps, fundingIndex: index(c), riskKeys, feeTo: addressOf(worker), asOf: AS_OF,
+        });
+        const o = w.outcome;
+        if (updatedAt === outside) {
+          expect([o.size, o.fee, o.fundingOwed, o.fundingPaid, o.fundingNetted].map(String)).toEqual([c.nextSize, c.fee, c.fundingOwed, c.fundingPaid, c.fundingNetted]);
+          const debt = BigInt(c.nextFundingDebt);
+          expect(o.fundingDebt).toBe(debt < 0n ? -debt : debt);
+          if (o.refused === "update leaves pair liquidatable") {
+            // Only the new rule may add a refusal, and only where the kernel's next version is one liquidate accepts.
+            expect(c.refused).toBeNull();
+            const next = { ...pair, size: o.size, fundingIndex: index(c), fundingDebt: o.fundingDebt, debtByTaker: o.debtByTaker, takerMargin: BigInt(c.nextTakerMargin), makerMargin: BigInt(c.nextMakerMargin) };
+            const health = liquidationOutcome(next, mark, mmrWad, 0n, scale, index(c));
+            expect(health.takerBad || health.makerBad).toBe(true);
+          } else {
+            expect(o.refused).toBe(c.refused);
+            if (!c.refused) expect([o.takerMargin, o.makerMargin].map(String)).toEqual([c.nextTakerMargin, c.nextMakerMargin]);
+          }
+        }
+        if (o.refused) {
+          reasons.set(o.refused, (reasons.get(o.refused) ?? 0) + 1);
+          await expect(noir.execute(w.inputs)).rejects.toThrow(o.refused);
+        } else {
+          if (updatedAt === AS_OF) cured++;
+          await noir.execute(w.inputs);
+        }
       }
     }
-    console.log("refusals exercised", Object.fromEntries(reasons));
-    expect(reasons.size).toBeGreaterThanOrEqual(2);
-  }, 280_000);
+    console.log("refusals exercised", Object.fromEntries(reasons), "cures accepted inside the cooldown", cured);
+    expect([...reasons.keys()]).toEqual(expect.arrayContaining(["update cooldown", "cure must reach initial margin", "update leaves pair liquidatable", "underwater pair cannot reduce"]));
+    expect(cured).toBeGreaterThan(0);
+  }, 560_000);
 });

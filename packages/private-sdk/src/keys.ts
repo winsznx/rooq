@@ -37,11 +37,25 @@ export function addressOf(k: WalletKeys): PrivateAddress {
 }
 
 /**
+ * Which deposit openings a deployment uses. 1 is the pre-M36 derivation from the seed alone, kept so v1 deposits are still
+ * found. 2 binds the deployment id, so one seed never repeats a deposit opening, and so never a public `inner`, across
+ * deployments.
+ */
+export type DepositDerivation = { readonly version: 1 } | { readonly version: 2; readonly deployment: bigint };
+
+export const LEGACY_DEPOSITS: DepositDerivation = { version: 1 };
+
+/** The deposit derivation for a deployment with this record version. */
+export const depositDerivation = (recordVersion: 1 | 2, deployment: bigint): DepositDerivation =>
+  recordVersion === 1 ? LEGACY_DEPOSITS : { version: 2, deployment };
+
+/**
  * Opening of the k-th deposit. Derived from the seed so a restored wallet can find its deposits by testing
  * k = 0, 1, 2, ... against `Shielded` events (REC-02) without any ciphertext.
  */
-export function depositOpening(seed: bigint, k: number): { readonly rho: bigint; readonly blind: bigint } {
-  return { rho: hash([T_SEED, seed, 3n, BigInt(k)]), blind: hash([T_SEED, seed, 4n, BigInt(k)]) };
+export function depositOpening(seed: bigint, k: number, derivation: DepositDerivation = LEGACY_DEPOSITS): { readonly rho: bigint; readonly blind: bigint } {
+  const at = derivation.version === 1 ? [BigInt(k)] : [derivation.deployment, BigInt(k)];
+  return { rho: hash([T_SEED, seed, 3n, ...at]), blind: hash([T_SEED, seed, 4n, ...at]) };
 }
 
 /**

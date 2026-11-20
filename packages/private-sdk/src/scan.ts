@@ -1,6 +1,6 @@
 import { FREE_DOMAIN } from "./constants";
 import { decrypt } from "./encryption";
-import { depositOpening, type WalletKeys } from "./keys";
+import { depositOpening, LEGACY_DEPOSITS, type DepositDerivation, type WalletKeys } from "./keys";
 import { noteCommitment, noteInner, ownerNullifier, type OwnedNote } from "./note";
 
 /** `NotesCreated` as emitted by ShieldedPool, decoded. */
@@ -45,13 +45,13 @@ export function scanCreated(keys: WalletKeys, deployment: bigint, events: readon
 
 /**
  * Recovers this wallet's deposits from public `Shielded` events using seed-derived openings k = 0, 1, ...
- * Stops after `gap` consecutive unused indices.
+ * Stops after `gap` consecutive unused indices. `derivation` must match the one the deposits were made with.
  */
-export function scanDeposits(seed: bigint, keys: WalletKeys, deployment: bigint, deposits: readonly ShieldedDeposit[], gap = 20): OwnedNote[] {
+export function scanDeposits(seed: bigint, keys: WalletKeys, deployment: bigint, deposits: readonly ShieldedDeposit[], gap = 20, derivation: DepositDerivation = LEGACY_DEPOSITS): OwnedNote[] {
   const byInner = new Map(deposits.map((d) => [d.inner, d]));
   const found: OwnedNote[] = [];
   for (let k = 0, misses = 0; misses < gap; k++) {
-    const { rho, blind } = depositOpening(seed, k);
+    const { rho, blind } = depositOpening(seed, k, derivation);
     const d = byInner.get(noteInner(keys.owner, rho, blind));
     if (!d) {
       misses++;

@@ -1,11 +1,12 @@
 import {
-  ACTOR_MAKER, ACTOR_NONE, ACTOR_TAKER, BPS, CLAIM_PT_LEN, CLOSE_MATURED, CLOSE_TAKER, FREE_DOMAIN, LOCK_PT_LEN, OI_BATCH, PAIR_PT_LEN, RECORD_VERSION, ROLE_MAKER, ROLE_TAKER, T_CLAIM, T_LOCK, T_MARKET, T_NF_REC, T_NONCE, T_OI,
-  T_OWNER, T_PAIR, T_TERMS, WAD,
+  ACTOR_MAKER, ACTOR_NONE, ACTOR_TAKER, AMOUNT_LIMIT, BPS, CLAIM_PT_LEN, CLOSE_MATURED, CLOSE_TAKER, FREE_DOMAIN, LOCK_PT_LEN, MAX_INTENT_LIFETIME, MAX_MAKER_LIFETIME, MIN_UPDATE_GAP, OI_BATCH, OI_CLOSE, OI_OPEN,
+  OI_REDUCE, PAIR_PT_LEN, RECORD_VERSION, RELAY_RHO_CLOSE, RELAY_RHO_LOCK, RELAY_RHO_REDEEM, RELAY_RHO_RELEASE, RELAY_RHO_UPDATE, ROLE_MAKER, ROLE_TAKER, T_AUTH, T_CLAIM, T_LOCK, T_MARKET,
+  T_NF_REC, T_NONCE, T_OI, T_OWNER, T_PAIR, T_TERMS, TAKER_GRACE, WAD,
 } from "./constants";
 import { hash, type Point } from "./crypto";
 import { decrypt, encrypt } from "./encryption";
 import { randomField, toHex32, type Hex } from "./field";
-import { ownerTag, type PrivateAddress, type WalletKeys } from "./keys";
+import { addressOf, ownerTag, type PrivateAddress, type WalletKeys } from "./keys";
 import { noteCommitment, noteInner, outputRho, ownerNullifier, type OwnedNote } from "./note";
 import type { MerkleTree } from "./tree";
 import type { InputMap, InputValue } from "./witness";
@@ -121,6 +122,8 @@ export interface PairRecord {
   readonly fundingDebt: bigint;
   readonly debtByTaker: bigint;
   readonly lastReduce: bigint;
+  /** When this version was created; the next update waits `minGap` from here unless it is a cure. */
+  readonly updatedAt: bigint;
   readonly takerMargin: bigint;
   readonly makerMargin: bigint;
   readonly takerAuth: bigint;
@@ -134,7 +137,7 @@ export interface PairRecord {
 }
 
 const pairPlaintext = (p: PairRecord): bigint[] => [
-  p.market, p.asset, p.isShort, p.size, p.entry, p.fundingIndex, p.closeSpread, p.fundingDebt, p.debtByTaker, p.lastReduce, p.takerMargin, p.makerMargin, p.takerAuth, p.takerX, p.takerY,
+  p.market, p.asset, p.isShort, p.size, p.entry, p.fundingIndex, p.closeSpread, p.fundingDebt, p.debtByTaker, p.lastReduce, p.updatedAt, p.takerMargin, p.makerMargin, p.takerAuth, p.takerX, p.takerY,
   p.makerAuth, p.makerX, p.makerY, p.recNonce, p.blind,
 ];
 
@@ -143,15 +146,15 @@ export function pairCommitment(deployment: bigint, p: PairRecord): bigint {
 }
 
 function pairFromPlaintext(pt: readonly bigint[]): PairRecord {
-  const [market, asset, isShort, size, entry, fundingIndex, closeSpread, fundingDebt, debtByTaker, lastReduce, takerMargin, makerMargin, takerAuth, takerX, takerY, makerAuth, makerX, makerY, recNonce, blind] = pt as [
-    bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint,
+  const [market, asset, isShort, size, entry, fundingIndex, closeSpread, fundingDebt, debtByTaker, lastReduce, updatedAt, takerMargin, makerMargin, takerAuth, takerX, takerY, makerAuth, makerX, makerY, recNonce, blind] = pt as [
+    bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint,
   ];
-  return { market, asset, isShort, size, entry, fundingIndex, closeSpread, fundingDebt, debtByTaker, lastReduce, takerMargin, makerMargin, takerAuth, takerX, takerY, makerAuth, makerX, makerY, recNonce, blind };
+  return { market, asset, isShort, size, entry, fundingIndex, closeSpread, fundingDebt, debtByTaker, lastReduce, updatedAt, takerMargin, makerMargin, takerAuth, takerX, takerY, makerAuth, makerX, makerY, recNonce, blind };
 }
 
 const pairInput = (p: PairRecord): InputValue => ({
   market: f(p.market), asset: f(p.asset), is_short: f(p.isShort), size: f(p.size), entry: f(p.entry), funding_index: f(p.fundingIndex), close_spread: f(p.closeSpread), funding_debt: f(p.fundingDebt), debt_by_taker: f(p.debtByTaker), last_reduce: f(p.lastReduce),
-  taker_margin: f(p.takerMargin), maker_margin: f(p.makerMargin), taker_auth: f(p.takerAuth), taker_x: f(p.takerX),
+  updated_at: f(p.updatedAt), taker_margin: f(p.takerMargin), maker_margin: f(p.makerMargin), taker_auth: f(p.takerAuth), taker_x: f(p.takerX),
   taker_y: f(p.takerY), maker_auth: f(p.makerAuth), maker_x: f(p.makerX), maker_y: f(p.makerY),
   rec_nonce: f(p.recNonce), blind: f(p.blind),
 });
@@ -179,6 +182,43 @@ function decryptOrNull(ct: readonly bigint[], encSk: bigint, len: number): bigin
   }
 }
 
+/** Who a relay fee note pays and how much. */
+export interface RelayFee {
+  readonly value: bigint;
+  readonly to: PrivateAddress;
+}
+
+/** The relay fee output as the contract takes it (`FeeOut`): one more FREE leaf per action. */
+export interface FeeOut {
+  readonly commitment: Hex;
+  readonly ct: readonly Hex[];
+}
+
+/**
+ * Zero fee to the wallet's own address. A zero note is a real encryption to a real key, so it can't be told apart from a
+ * paid one on chain, and the relayer's scanner never sees dust.
+ */
+export const zeroRelayFee = (self: PrivateAddress): RelayFee => ({ value: 0n, to: self });
+
+/**
+ * Builds the relay fee note every relayed action carries (lib.nr `RelayFee`), with rho = output_rho(nf0, nf1, index).
+ * The caller still deducts `fee.value` from what the prover is entitled to.
+ */
+export function relayFeeNote(deployment: bigint, asset: bigint, nf0: bigint, nf1: bigint, index: number, fee: RelayFee): { input: InputValue; out: FeeOut; value: bigint } {
+  if (fee.value < 0n || fee.value >= AMOUNT_LIMIT) throw new RangeError("relay fee out of range");
+  const note = noteOutput(deployment, asset, fee.value, outputRho(nf0, nf1, index), fee.to);
+  return {
+    value: fee.value,
+    input: { value: f(fee.value), auth: f(fee.to.auth), pk: { x: f(fee.to.pk.x), y: f(fee.to.pk.y) }, blind: f(note.blind), eph: f(note.eph) },
+    out: { commitment: toHex32(note.commitment), ct: note.ct.map(toHex32) },
+  };
+}
+
+/** On a path the circuit lets anyone prove from the plaintext, a nonzero fee needs the owner's key. */
+function requireOwnerKeyForFee(fee: RelayFee, sk: bigint | undefined, ownerAuth: bigint): void {
+  if (fee.value !== 0n && (sk === undefined || hash([T_AUTH, sk]) !== ownerAuth)) throw new Error("fee needs the owner key");
+}
+
 /** Replaces a missing second input with a zero-value dummy owned by the spender. */
 function padInputs(keys: WalletKeys, deployment: bigint, asset: bigint, inputs: readonly OwnedNote[]): [OwnedNote, OwnedNote] {
   if (inputs.length < 1 || inputs.length > 2) throw new RangeError("one or two input notes");
@@ -199,6 +239,8 @@ export interface LockPublic {
   readonly ownerCt: readonly Hex[];
   readonly coordinatorCt: readonly Hex[];
   readonly riskCt: readonly (readonly Hex[])[];
+  readonly asOf: bigint;
+  readonly relayFee: FeeOut;
 }
 
 export function lockWitness(r: {
@@ -217,11 +259,20 @@ export function lockWitness(r: {
   readonly payout: PrivateAddress;
   /** The wallet's main key: its own copy of the lock is encrypted here so restore can find it. */
   readonly view: Point;
+  /** Latest block time; the contract refuses one in the future. Expiry may be at most `as_of` plus the role's lifetime. */
+  readonly asOf: bigint;
+  /** [intent cap, maker cap] as the contract supplies them. */
+  readonly maxLifetime?: readonly [bigint, bigint];
+  /** Defaults to zero to the wallet's own address. */
+  readonly relayFee?: RelayFee;
 }): { inputs: InputMap; publicInputs: LockPublic; record: LockRecord } {
+  const maxLifetime = r.maxLifetime ?? [MAX_INTENT_LIFETIME, MAX_MAKER_LIFETIME];
+  if (r.expiry > r.asOf + (r.terms.role === ROLE_MAKER ? maxLifetime[1] : maxLifetime[0])) throw new RangeError("lock lifetime");
+  const fee = r.relayFee ?? zeroRelayFee(addressOf(r.keys));
   const ins = padInputs(r.keys, r.deployment, r.asset, r.inputs);
   const total = ins[0].value + ins[1].value;
-  if (r.amount <= 0n || r.amount > total) throw new RangeError("lock amount");
-  const changeValue = total - r.amount;
+  if (r.amount <= 0n || r.amount + fee.value > total) throw new RangeError("lock amount");
+  const changeValue = total - r.amount - fee.value;
   const [nf0, nf1] = [ins[0].nullifier, ins[1].nullifier];
   const salt = randomField();
   const record: LockRecord = {
@@ -234,6 +285,7 @@ export function lockWitness(r: {
   const cmChange = noteCommitment(r.deployment, r.asset, changeValue, noteInner(r.keys.owner, rho, changeBlind));
   const cmLock = lockCommitment(r.deployment, record);
   const ctChange = encrypt([FREE_DOMAIN, r.asset, changeValue, rho, changeBlind], r.keys.pk, changeEph);
+  const relay = relayFeeNote(r.deployment, r.asset, nf0, nf1, RELAY_RHO_LOCK, fee);
   const [ephOwner, ephCoordinator] = [randomField(), randomField()];
   const ctOwner = encrypt(lockPlaintext(record), r.view, ephOwner);
   const ctCoordinator = encrypt(lockPlaintext(record), r.coordinator, ephCoordinator);
@@ -265,6 +317,11 @@ export function lockWitness(r: {
       coordinator_pk: [f(r.coordinator.x), f(r.coordinator.y)],
       ct_risk: ctRisk.map((c) => c.map(f)),
       risk_pk: r.riskKeys.map((k) => [f(k.x), f(k.y)]),
+      relay: relay.input,
+      as_of: f(r.asOf),
+      max_lifetime: maxLifetime.map(f),
+      cm_relay: relay.out.commitment,
+      ct_relay: [...relay.out.ct],
     },
     publicInputs: {
       root: toHex32(root),
@@ -275,6 +332,8 @@ export function lockWitness(r: {
       ownerCt: ctOwner.map(toHex32),
       coordinatorCt: ctCoordinator.map(toHex32),
       riskCt: ctRisk.map((c) => c.map(toHex32)),
+      asOf: r.asOf,
+      relayFee: relay.out,
     },
   };
 }
@@ -290,23 +349,38 @@ export interface ReleasePublic {
   readonly commitment: Hex;
   readonly ciphertext: readonly Hex[];
   readonly asOf: bigint;
+  readonly relayFee: FeeOut;
 }
 
-export function releaseWitness(r: { readonly held: HeldLock; readonly deployment: bigint; readonly tree: MerkleTree; readonly asOf: bigint }): { inputs: InputMap; publicInputs: ReleasePublic } {
+/**
+ * Refunds an expired lock. Anyone holding the plaintext can prove it with a zero fee; a nonzero fee needs `sk`, the lock's
+ * one-time key (`lockAddressKeys`). The fee defaults to zero to the lock's own payout address.
+ */
+export function releaseWitness(r: {
+  readonly held: HeldLock;
+  readonly deployment: bigint;
+  readonly tree: MerkleTree;
+  readonly asOf: bigint;
+  readonly sk?: bigint;
+  readonly relayFee?: RelayFee;
+}): { inputs: InputMap; publicInputs: ReleasePublic; value: bigint } {
   const l = r.held.record;
-  const owner = hash([T_OWNER, l.ownerAuth, l.ownerX, l.ownerY]);
+  const self: PrivateAddress = { auth: l.ownerAuth, pk: { x: l.ownerX, y: l.ownerY } };
+  const fee = r.relayFee ?? zeroRelayFee(self);
+  requireOwnerKeyForFee(fee, r.sk, l.ownerAuth);
+  if (fee.value > l.amount) throw new RangeError("fee above available");
+  const value = l.amount - fee.value;
   const nf = recNullifier(lockCommitment(r.deployment, l), l.recNonce);
-  const rho = outputRho(nf, 0n, 0);
-  const [blind, eph] = [randomField(), randomField()];
-  const cm = noteCommitment(r.deployment, l.asset, l.amount, noteInner(owner, rho, blind));
-  const ct = encrypt([FREE_DOMAIN, l.asset, l.amount, rho, blind], { x: l.ownerX, y: l.ownerY }, eph);
+  const out = noteOutput(r.deployment, l.asset, value, outputRho(nf, 0n, 0), self);
+  const relay = relayFeeNote(r.deployment, l.asset, nf, 0n, RELAY_RHO_RELEASE, fee);
   const root = r.tree.root();
   return {
+    value,
     inputs: {
-      lock: lockInput(l), index: f(BigInt(r.held.leafIndex)), path: r.tree.path(r.held.leafIndex).map(f), blind: f(blind), eph: f(eph),
-      root: f(root), nf: f(nf), cm_out: f(cm), ct: ct.map(f), deployment: f(r.deployment), now: f(r.asOf),
+      lock: lockInput(l), index: f(BigInt(r.held.leafIndex)), path: r.tree.path(r.held.leafIndex).map(f), blind: f(out.blind), eph: f(out.eph), sk: f(r.sk ?? 0n), relay: relay.input,
+      root: f(root), nf: f(nf), cm_out: f(out.commitment), ct: out.ct.map(f), deployment: f(r.deployment), now: f(r.asOf), cm_relay: relay.out.commitment, ct_relay: [...relay.out.ct],
     },
-    publicInputs: { root: toHex32(root), nullifier: toHex32(nf), commitment: toHex32(cm), ciphertext: ct.map(toHex32), asOf: r.asOf },
+    publicInputs: { root: toHex32(root), nullifier: toHex32(nf), commitment: toHex32(out.commitment), ciphertext: out.ct.map(toHex32), asOf: r.asOf, relayFee: relay.out },
   };
 }
 
@@ -333,10 +407,13 @@ export interface OpenLimits {
   readonly oiPending: bigint;
   readonly maxOiUsd: bigint;
   readonly maxPairSize: bigint;
+  /** Market cap on the maker's standing close spread, in bps. */
+  readonly maxCloseSpread: bigint;
 }
 
-export function oiDeltaCommitment(deployment: bigint, market: bigint, isShort: bigint, size: bigint, remove: bigint, recNonce: bigint, insIn = 0n, claim = 0n): bigint {
-  return hash([T_OI, deployment, market, isShort, size, remove, insIn, claim, recNonce]);
+/** `kind` is OI_OPEN, OI_CLOSE (close and liquidation) or OI_REDUCE. */
+export function oiDeltaCommitment(deployment: bigint, market: bigint, isShort: bigint, size: bigint, kind: bigint, recNonce: bigint, insIn = 0n, claim = 0n): bigint {
+  return hash([T_OI, deployment, market, isShort, size, kind, insIn, claim, recNonce]);
 }
 
 export function openPairWitness(r: {
@@ -360,7 +437,7 @@ export function openPairWitness(r: {
   const nf1 = recNullifier(lockCommitment(r.deployment, m), m.recNonce);
   const salt = randomField();
   const record: PairRecord = {
-    market: t.market, asset: t.asset, isShort: t.t2, size: t.t3, entry: fill, fundingIndex: r.fundingIndex, closeSpread: m.t4, fundingDebt: 0n, debtByTaker: 0n, lastReduce: 0n,
+    market: t.market, asset: t.asset, isShort: t.t2, size: t.t3, entry: fill, fundingIndex: r.fundingIndex, closeSpread: m.t4, fundingDebt: 0n, debtByTaker: 0n, lastReduce: 0n, updatedAt: r.asOf,
     takerMargin: t.amount - takerFee, makerMargin: r.makerMargin, takerAuth: t.ownerAuth, takerX: t.ownerX, takerY: t.ownerY,
     makerAuth: m.ownerAuth, makerX: m.ownerX, makerY: m.ownerY, recNonce: deriveRecNonce(nf0, nf1, 0n, salt), blind: randomField(),
   };
@@ -376,7 +453,7 @@ export function openPairWitness(r: {
   const cmRefund = noteCommitment(r.deployment, m.asset, refund, noteInner(makerOwner, rho, refundBlind));
   const ctRefund = encrypt([FREE_DOMAIN, m.asset, refund, rho, refundBlind], keys[1]!, refundEph);
   const root = r.tree.root();
-  const delta = oiDeltaCommitment(r.deployment, t.market, t.t2, t.t3, 0n, record.recNonce);
+  const delta = oiDeltaCommitment(r.deployment, t.market, t.t2, t.t3, OI_OPEN, record.recNonce);
   const feeNote = noteOutput(r.deployment, t.asset, takerFee, outputRho(nf0, nf1, 2), r.limits.feeTo);
   const held = (h: HeldLock): InputValue => ({ lock: lockInput(h.record), index: f(BigInt(h.leafIndex)), path: r.tree.path(h.leafIndex).map(f) });
   return {
@@ -390,6 +467,7 @@ export function openPairWitness(r: {
       fee_blind: f(feeNote.blind), fee_eph: f(feeNote.eph), long_oi: f(r.limits.state.longOi), short_oi: f(r.limits.state.shortOi), head_insurance: f(r.limits.state.insurance), head_bad_debt: f(r.limits.state.badDebt), head_bond_used: f(r.limits.state.bondUsed), head_blind: f(r.limits.state.blind),
       cm_fee: f(feeNote.commitment), ct_fee: feeNote.ct.map(f), fee_bps: f(r.limits.feeBps), fee_auth: f(r.limits.feeTo.auth), fee_pk: [f(r.limits.feeTo.pk.x), f(r.limits.feeTo.pk.y)],
       head: f(r.limits.head), oi_pending: f(r.limits.oiPending), max_oi_usd: f(r.limits.maxOiUsd), max_pair_size: f(r.limits.maxPairSize),
+      max_close_spread: f(r.limits.maxCloseSpread),
     },
     fee: takerFee,
     publicInputs: {
@@ -519,14 +597,32 @@ export interface RedeemPublic {
   readonly commitment: Hex;
   readonly ciphertext: readonly Hex[];
   readonly deltaCommitment: Hex;
+  readonly relayFee: FeeOut;
 }
 
-/** Pays a folded claim. Needs no key: the note can only go to the claim's committed owner. */
-export function redeemWitness(r: { readonly claim: ClaimRecord; readonly leafIndex: number; readonly deployment: bigint; readonly tree: MerkleTree; readonly ratio: bigint }): { inputs: InputMap; publicInputs: RedeemPublic; value: bigint } {
+/**
+ * Pays a folded claim. Needs no key for a zero fee: the note can only go to the claim's committed owner. A nonzero fee
+ * needs `sk`, the claim owner's key. The fee defaults to zero to the claim's owner address. `value` is net of the fee.
+ */
+export function redeemWitness(r: {
+  readonly claim: ClaimRecord;
+  readonly leafIndex: number;
+  readonly deployment: bigint;
+  readonly tree: MerkleTree;
+  readonly ratio: bigint;
+  readonly sk?: bigint;
+  readonly relayFee?: RelayFee;
+}): { inputs: InputMap; publicInputs: RedeemPublic; value: bigint } {
   const c = r.claim;
+  const self: PrivateAddress = { auth: c.ownerAuth, pk: { x: c.ownerX, y: c.ownerY } };
+  const fee = r.relayFee ?? zeroRelayFee(self);
+  requireOwnerKeyForFee(fee, r.sk, c.ownerAuth);
+  const paid = (c.amount * r.ratio) / WAD;
+  if (fee.value > paid) throw new RangeError("fee above available");
+  const value = paid - fee.value;
   const nf = recNullifier(claimCommitment(r.deployment, c), c.recNonce);
-  const value = (c.amount * r.ratio) / WAD;
-  const out = noteOutput(r.deployment, c.asset, value, outputRho(nf, 0n, 0), { auth: c.ownerAuth, pk: { x: c.ownerX, y: c.ownerY } });
+  const out = noteOutput(r.deployment, c.asset, value, outputRho(nf, 0n, 0), self);
+  const relay = relayFeeNote(r.deployment, c.asset, nf, 0n, RELAY_RHO_REDEEM, fee);
   const root = r.tree.root();
   const claimInput: InputValue = {
     market: f(c.market), asset: f(c.asset), amount: f(c.amount), owner_auth: f(c.ownerAuth), owner_x: f(c.ownerX), owner_y: f(c.ownerY),
@@ -535,10 +631,11 @@ export function redeemWitness(r: { readonly claim: ClaimRecord; readonly leafInd
   return {
     value,
     inputs: {
-      claim: claimInput, index: f(BigInt(r.leafIndex)), path: r.tree.path(r.leafIndex).map(f), blind: f(out.blind), eph: f(out.eph),
+      claim: claimInput, index: f(BigInt(r.leafIndex)), path: r.tree.path(r.leafIndex).map(f), blind: f(out.blind), eph: f(out.eph), sk: f(r.sk ?? 0n), relay: relay.input,
       root: f(root), nf: f(nf), cm_out: f(out.commitment), ct: out.ct.map(f), deployment: f(r.deployment), delta_cm: f(c.deltaCm), ratio: f(r.ratio),
+      cm_relay: relay.out.commitment, ct_relay: [...relay.out.ct],
     },
-    publicInputs: { root: toHex32(root), nullifier: toHex32(nf), commitment: toHex32(out.commitment), ciphertext: out.ct.map(toHex32), deltaCommitment: toHex32(c.deltaCm) },
+    publicInputs: { root: toHex32(root), nullifier: toHex32(nf), commitment: toHex32(out.commitment), ciphertext: out.ct.map(toHex32), deltaCommitment: toHex32(c.deltaCm), relayFee: relay.out },
   };
 }
 
@@ -561,7 +658,7 @@ export function liquidateWitness(r: {
   const outcome = liquidationOutcome(p, r.mark, r.mmrWad, r.penaltyBps, r.scale, r.fundingIndex);
   const cm = pairCommitment(r.deployment, p);
   const nf = recNullifier(cm, p.recNonce);
-  const delta = oiDeltaCommitment(r.deployment, p.market, p.isShort, p.size, 1n, p.recNonce, outcome.toInsurance, outcome.claim);
+  const delta = oiDeltaCommitment(r.deployment, p.market, p.isShort, p.size, OI_CLOSE, p.recNonce, outcome.toInsurance, outcome.claim);
   const takerWins = pairPnl(p.isShort, p.size, p.entry, r.mark, r.scale).takerGains;
   const winner = takerWins ? { auth: p.takerAuth, x: p.takerX, y: p.takerY } : { auth: p.makerAuth, x: p.makerX, y: p.makerY };
   const claimSalt = randomField();
@@ -648,9 +745,13 @@ export interface ClosePublic {
   readonly market: bigint;
   readonly deltaCommitment: Hex;
   readonly mode: bigint;
+  readonly relayFee: FeeOut;
 }
 
-/** `sk` is the taker's one-time key for mode 0 and is ignored by the circuit otherwise. */
+/**
+ * `sk` is the taker's one-time key. Mode 0 needs it; modes 1 and 2 need it only for a nonzero relay fee, which comes out
+ * of the taker's payout. The fee defaults to zero to the taker's one-time address.
+ */
 export function closeWitness(r: {
   readonly pair: PairRecord;
   readonly leafIndex: number;
@@ -663,14 +764,20 @@ export function closeWitness(r: {
   readonly sk: bigint;
   readonly feeBps: bigint;
   readonly feeTo: PrivateAddress;
-}): { inputs: InputMap; publicInputs: ClosePublic; outcome: CloseOutcome } {
+  readonly relayFee?: RelayFee;
+}): { inputs: InputMap; publicInputs: ClosePublic; outcome: CloseOutcome; takerOut: bigint } {
   const p = r.pair;
+  const fee = r.relayFee ?? zeroRelayFee({ auth: p.takerAuth, pk: { x: p.takerX, y: p.takerY } });
+  requireOwnerKeyForFee(fee, r.sk, p.takerAuth);
   const outcome = closeOutcome(p, r.mode, r.mark, r.scale, r.fundingIndex, r.feeBps);
+  if (fee.value > outcome.takerOut) throw new RangeError("fee above available");
+  const takerOut = outcome.takerOut - fee.value;
   const cm = pairCommitment(r.deployment, p);
   const nf = recNullifier(cm, p.recNonce);
-  const delta = oiDeltaCommitment(r.deployment, p.market, p.isShort, p.size, 1n, p.recNonce);
+  const delta = oiDeltaCommitment(r.deployment, p.market, p.isShort, p.size, OI_CLOSE, p.recNonce);
+  const relay = relayFeeNote(r.deployment, p.asset, nf, 0n, RELAY_RHO_CLOSE, fee);
   const outs = [
-    { value: outcome.takerOut, auth: p.takerAuth, pk: { x: p.takerX, y: p.takerY } },
+    { value: takerOut, auth: p.takerAuth, pk: { x: p.takerX, y: p.takerY } },
     { value: outcome.makerOut, auth: p.makerAuth, pk: { x: p.makerX, y: p.makerY } },
     { value: outcome.fee, auth: r.feeTo.auth, pk: r.feeTo.pk },
   ];
@@ -683,8 +790,9 @@ export function closeWitness(r: {
   const root = r.tree.root();
   return {
     outcome,
+    takerOut,
     inputs: {
-      fee_bps: f(r.feeBps), fee_auth: f(r.feeTo.auth), fee_pk: [f(r.feeTo.pk.x), f(r.feeTo.pk.y)],
+      fee_bps: f(r.feeBps), fee_auth: f(r.feeTo.auth), fee_pk: [f(r.feeTo.pk.x), f(r.feeTo.pk.y)], relay: relay.input, cm_relay: relay.out.commitment, ct_relay: [...relay.out.ct],
       pair: pairInput(p), index: f(BigInt(r.leafIndex)), path: r.tree.path(r.leafIndex).map(f), sk: f(r.sk),
       blind: built.map((b) => f(b.blind)), eph: built.map((b) => f(b.eph)),
       root: f(root), nf: f(nf), cm_out: built.map((b) => f(b.commitment)), ct: built.map((b) => b.ct.map(f)),
@@ -695,7 +803,7 @@ export function closeWitness(r: {
       root: toHex32(root), nullifier: toHex32(nf),
       commitments: [toHex32(built[0]!.commitment), toHex32(built[1]!.commitment), toHex32(built[2]!.commitment)],
       ciphertexts: [built[0]!.ct.map(toHex32), built[1]!.ct.map(toHex32), built[2]!.ct.map(toHex32)],
-      market: p.market, deltaCommitment: toHex32(delta), mode: r.mode,
+      market: p.market, deltaCommitment: toHex32(delta), mode: r.mode, relayFee: relay.out,
     },
   };
 }
@@ -721,7 +829,30 @@ export interface UpdateRequest {
   readonly reduce: bigint;
 }
 
-export function updateOutcome(p: PairRecord, u: UpdateRequest, mark: bigint, imrWad: bigint, scale: bigint, fundingIndex: bigint, feeBps: bigint): UpdateOutcome {
+/** Contract-supplied rules an update is checked against besides the market's prices. */
+export interface UpdateGuard {
+  /** Maintenance fraction: with a fresh mark, the next version must not be liquidatable. */
+  readonly mmrWad: bigint;
+  /** The version's timestamp, near the latest block time (the contract bounds it). */
+  readonly asOf: bigint;
+  /** Cooldown between versions of one lineage. */
+  readonly minGap?: bigint;
+}
+
+/** When a pair can next be changed by anything but a cure. Until TAKER_GRACE seconds after that, only the taker can. */
+export const nextUpdateAt = (p: PairRecord, minGap: bigint = MIN_UPDATE_GAP): bigint => p.updatedAt + minGap;
+
+/** pair_update's `updated_at` rule: a cure inside the cooldown keeps the replaced version's clock. */
+const clockAfter = (p: PairRecord, asOf: bigint, minGap: bigint = MIN_UPDATE_GAP): bigint => (asOf < nextUpdateAt(p, minGap) ? p.updatedAt : asOf);
+
+/** lib.nr `side_below_im`: gains count only up to what the counterparty has posted, and unpaid funding counts against its payer. */
+function sideBelowIm(takerSide: boolean, takerMargin: bigint, makerMargin: bigint, takerPays: boolean, unpaid: bigint, h: PairPnl, im: bigint): boolean {
+  const certified = { ...h, floor: minOf(h.floor, takerSide ? makerMargin : takerMargin) };
+  const required = takerSide === takerPays ? im + unpaid : im;
+  return below(takerSide ? takerMargin : makerMargin, takerSide ? h.takerGains : !h.takerGains, certified, required);
+}
+
+export function updateOutcome(p: PairRecord, u: UpdateRequest, mark: bigint, imrWad: bigint, scale: bigint, fundingIndex: bigint, feeBps: bigint, guard: UpdateGuard): UpdateOutcome {
   const f0 = settleFunding(p, fundingIndex, scale);
   const fill = p.isShort === 0n ? (mark * (BPS - p.closeSpread)) / BPS : ceilDiv(mark * (BPS + p.closeSpread), BPS);
   const realized = pairPnl(p.isShort, u.reduce, p.entry, fill, scale);
@@ -739,15 +870,25 @@ export function updateOutcome(p: PairRecord, u: UpdateRequest, mark: bigint, imr
   if (u.actor !== ACTOR_NONE && own < u.remove) return { ...base, refused: "removal above margin", takerMargin: 0n, makerMargin: 0n, fee };
   if (u.actor === ACTOR_TAKER) takerMargin -= u.remove;
   if (u.actor === ACTOR_MAKER) makerMargin -= u.remove;
-  if (u.remove !== 0n) {
-    const im = marginRequirement(base.size, mark, imrWad, scale);
-    const h = pairPnl(p.isShort, base.size, p.entry, mark, scale);
-    const isTaker = u.actor === ACTOR_TAKER;
-    const certified = { ...h, floor: minOf(h.floor, isTaker ? makerMargin : takerMargin) };
-    const debt = isTaker === f0.takerPays ? unpaid : 0n;
-    if (below(isTaker ? takerMargin : makerMargin, isTaker ? h.takerGains : !h.takerGains, certified, im + debt)) {
-      return { ...base, refused: "below initial margin", takerMargin: 0n, makerMargin: 0n, fee };
-    }
+  const refuse = (refused: string): UpdateOutcome => ({ ...base, refused, takerMargin: 0n, makerMargin: 0n, fee });
+  const isTaker = u.actor === ACTOR_TAKER;
+  const im = marginRequirement(base.size, mark, imrWad, scale);
+  const atMark = pairPnl(p.isShort, base.size, p.entry, mark, scale);
+  if (u.remove !== 0n && sideBelowIm(isTaker, takerMargin, makerMargin, f0.takerPays, unpaid, atMark, im)) return refuse("below initial margin");
+  // Inside the cooldown only a cure runs, and it must reach initial margin. After it, a partial top-up is an ordinary add.
+  const cooldownEnd = nextUpdateAt(p, guard.minGap);
+  if (guard.asOf < cooldownEnd) {
+    const preBad = sideBelowIm(isTaker, f0.takerMargin, f0.makerMargin, f0.takerPays, f0.unpaid, atMark, im);
+    const cure = u.actor !== ACTOR_NONE && u.add !== 0n && u.remove === 0n && u.reduce === 0n && mark !== 0n && preBad;
+    if (!cure) return refuse("update cooldown");
+    if (sideBelowIm(isTaker, takerMargin, makerMargin, f0.takerPays, unpaid, atMark, im)) return refuse("cure must reach initial margin");
+  } else if (guard.asOf < cooldownEnd + TAKER_GRACE && !isTaker) {
+    return refuse("taker grace");
+  }
+  if (mark !== 0n) {
+    const next: PairRecord = { ...p, size: base.size, fundingIndex, fundingDebt: base.fundingDebt, debtByTaker: base.debtByTaker, takerMargin, makerMargin };
+    const health = liquidationOutcome(next, mark, guard.mmrWad, 0n, scale, fundingIndex);
+    if (health.takerBad || health.makerBad) return refuse("update leaves pair liquidatable");
   }
   return { ...base, refused: null, takerMargin, makerMargin, fee };
 }
@@ -764,9 +905,14 @@ export interface UpdatePublic {
   readonly market: bigint;
   readonly deltaCommitment: Hex;
   readonly carriedNullifier: Hex;
+  readonly asOf: bigint;
+  readonly relayFee: FeeOut;
 }
 
-/** `sk` is the acting owner's one-time key. `noteOwner` spends `note` when margin is added; both are optional. */
+/**
+ * `sk` is the acting owner's one-time key. `noteOwner` spends `note` when margin is added; both are optional. The relay
+ * fee comes out of the actor's out note and defaults to zero to `noteOwner`. Actor 0 has no key and can only pay zero.
+ */
 export function updateWitness(r: {
   readonly pair: PairRecord;
   readonly leafIndex: number;
@@ -778,36 +924,45 @@ export function updateWitness(r: {
   readonly note?: OwnedNote;
   readonly mark: bigint;
   readonly imrWad: bigint;
+  readonly mmrWad: bigint;
   readonly scale: bigint;
   readonly feeBps: bigint;
   readonly fundingIndex: bigint;
   readonly riskKeys: readonly [Point, Point];
   readonly feeTo: PrivateAddress;
+  readonly asOf: bigint;
+  readonly minGap?: bigint;
   /** Set when the pair has a pending exit request, so the request moves to the next version. */
   readonly carryExit?: boolean;
+  readonly relayFee?: RelayFee;
 }): { inputs: InputMap; publicInputs: UpdatePublic; record: PairRecord; outcome: UpdateOutcome; outValue: bigint } {
   const p = r.pair;
   const u = r.update;
-  const outcome = updateOutcome(p, u, r.mark, r.imrWad, r.scale, r.fundingIndex, r.feeBps);
+  const minGap = r.minGap ?? MIN_UPDATE_GAP;
+  const fee = r.relayFee ?? zeroRelayFee(addressOf(r.noteOwner));
+  if (fee.value !== 0n && u.actor === ACTOR_NONE) throw new Error("fee needs the owner key");
+  const outcome = updateOutcome(p, u, r.mark, r.imrWad, r.scale, r.fundingIndex, r.feeBps, { mmrWad: r.mmrWad, asOf: r.asOf, minGap });
   const [note] = padInputs(r.noteOwner, r.deployment, p.asset, [r.note ?? zeroNote(r.noteOwner, r.deployment, p.asset)]);
+  if (note.value - u.add + u.remove < fee.value) throw new RangeError("fee above available");
   const nf0 = recNullifier(pairCommitment(r.deployment, p), p.recNonce);
   const nf1 = note.nullifier;
   const salt = randomField();
   const record: PairRecord = {
-    ...p, size: outcome.size, fundingIndex: r.fundingIndex, fundingDebt: outcome.fundingDebt, debtByTaker: outcome.debtByTaker, lastReduce: u.reduce,
+    ...p, size: outcome.size, fundingIndex: r.fundingIndex, fundingDebt: outcome.fundingDebt, debtByTaker: outcome.debtByTaker, lastReduce: u.reduce, updatedAt: clockAfter(p, r.asOf, minGap),
     takerMargin: outcome.takerMargin, makerMargin: outcome.makerMargin, recNonce: deriveRecNonce(nf0, nf1, 0n, salt), blind: randomField(),
   };
   const cm = pairCommitment(r.deployment, record);
   const carried = r.carryExit ? recNullifier(cm, record.recNonce) : 0n;
-  const delta = oiDeltaCommitment(r.deployment, p.market, p.isShort, u.reduce, 1n, record.recNonce);
+  const delta = oiDeltaCommitment(r.deployment, p.market, p.isShort, u.reduce, OI_REDUCE, record.recNonce);
   const keys: Point[] = [{ x: p.takerX, y: p.takerY }, { x: p.makerX, y: p.makerY }, r.riskKeys[0], r.riskKeys[1]];
   const ephs = keys.map(() => randomField());
   const pt = pairPlaintext(record);
   const cts = keys.map((k, i) => encrypt(pt, k, ephs[i]!));
-  const outValue = note.value - u.add + u.remove;
+  const outValue = note.value - u.add + u.remove - fee.value;
   const to: PrivateAddress = u.actor === ACTOR_MAKER ? { auth: p.makerAuth, pk: keys[1]! } : { auth: p.takerAuth, pk: keys[0]! };
   const out = noteOutput(r.deployment, p.asset, outValue, outputRho(nf0, nf1, 1), to);
   const feeNote = noteOutput(r.deployment, p.asset, outcome.fee, outputRho(nf0, nf1, 2), r.feeTo);
+  const relay = relayFeeNote(r.deployment, p.asset, nf0, nf1, RELAY_RHO_UPDATE, fee);
   const root = r.tree.root();
   const zeroPath = Array.from({ length: r.tree.depth }, () => f(0n));
   return {
@@ -817,16 +972,18 @@ export function updateWitness(r: {
       spender_sk: f(r.noteOwner.sk), spender_pk: { x: f(r.noteOwner.pk.x), y: f(r.noteOwner.pk.y) },
       note: { value: f(note.value), rho: f(note.rho), blind: f(note.blind), index: f(BigInt(note.leafIndex)), path: note.value === 0n ? zeroPath : r.tree.path(note.leafIndex).map(f) },
       add: f(u.add), remove: f(u.remove), reduce: f(u.reduce), salt: f(salt), new_blind: f(record.blind), pair_eph: ephs.map(f),
-      out_blind: f(out.blind), out_eph: f(out.eph), fee_blind: f(feeNote.blind), fee_eph: f(feeNote.eph),
+      out_blind: f(out.blind), out_eph: f(out.eph), fee_blind: f(feeNote.blind), fee_eph: f(feeNote.eph), relay: relay.input,
       root: f(root), nf: [f(nf0), f(nf1)], cm_pair: f(cm), cm_out: f(out.commitment), cm_fee: f(feeNote.commitment), ct_pair: cts.map((c) => c.map(f)),
       ct_out: out.ct.map(f), ct_fee: feeNote.ct.map(f), deployment: f(r.deployment), market: f(p.market), asset: f(p.asset), mark: f(r.mark), imr_wad: f(r.imrWad), scale: f(r.scale),
       fee_bps: f(r.feeBps), funding_index: f(r.fundingIndex), delta_cm: f(delta), risk_pk: r.riskKeys.map((k) => [f(k.x), f(k.y)]),
       fee_auth: f(r.feeTo.auth), fee_pk: [f(r.feeTo.pk.x), f(r.feeTo.pk.y)], carried_nf: f(carried),
+      mmr_wad: f(r.mmrWad), as_of: f(r.asOf), min_gap: f(minGap), cm_relay: relay.out.commitment, ct_relay: [...relay.out.ct],
     },
     publicInputs: {
       carriedNullifier: toHex32(carried),
       root: toHex32(root), nullifiers: [toHex32(nf0), toHex32(nf1)], pairCommitment: toHex32(cm), outCommitment: toHex32(out.commitment), feeCommitment: toHex32(feeNote.commitment),
       pairCt: cts.map((c) => c.map(toHex32)), outCt: out.ct.map(toHex32), feeCt: feeNote.ct.map(toHex32), market: p.market, deltaCommitment: toHex32(delta),
+      asOf: r.asOf, relayFee: relay.out,
     },
   };
 }
@@ -859,7 +1016,8 @@ export function exitRequestWitness(r: {
 export interface OiDelta {
   readonly isShort: bigint;
   readonly size: bigint;
-  readonly remove: bigint;
+  /** OI_OPEN adds to open interest; OI_CLOSE and OI_REDUCE remove from it. */
+  readonly kind: bigint;
   readonly recNonce: bigint;
   /** Penalty share entering insurance. Omitted means 0. */
   readonly insIn?: bigint;
@@ -906,6 +1064,9 @@ export interface FundingPublic {
   readonly indexNeg: bigint;
   readonly claimRatio: bigint;
   readonly ciphertexts: readonly (readonly Hex[])[];
+  /** Public bond draw before and after the batch; the contract checks the first and stores the second. */
+  readonly bondUsedPrev: bigint;
+  readonly bondUsedNext: bigint;
 }
 
 export function marketHead(deployment: bigint, market: bigint, s: MarketState): bigint {
@@ -977,7 +1138,8 @@ export function fundingEpochWitness(r: {
   const { mag, neg } = epochIndexChange(r.state.longOi, r.state.shortOi, r.maxRateWad, r.dt, r.mark);
   let [longOi, shortOi] = [r.state.longOi, r.state.shortOi];
   for (const { opening: d } of r.deltas) {
-    const signed = d.remove === 0n ? d.size : -d.size;
+    if (d.kind !== OI_OPEN && d.kind !== OI_CLOSE && d.kind !== OI_REDUCE) throw new RangeError("unknown kind");
+    const signed = d.kind === OI_OPEN ? d.size : -d.size;
     if (d.isShort === 0n) longOi += signed;
     else shortOi += signed;
   }
@@ -986,7 +1148,7 @@ export function fundingEpochWitness(r: {
   const newHead = marketHead(r.deployment, r.market, next);
   const ephs = r.keys.map(() => randomField());
   const cts = r.keys.map((k, i) => encrypt([longOi, shortOi, next.insurance, next.badDebt, next.bondUsed, next.blind], k, ephs[i]!));
-  const blank: OiDelta = { isShort: 0n, size: 0n, remove: 0n, recNonce: 0n };
+  const blank: OiDelta = { isShort: 0n, size: 0n, kind: OI_OPEN, recNonce: 0n };
   const slots = Array.from({ length: OI_BATCH }, (_, i) => r.deltas[i]);
   return {
     next,
@@ -994,13 +1156,17 @@ export function fundingEpochWitness(r: {
       long_oi: f(r.state.longOi), short_oi: f(r.state.shortOi), insurance: f(r.state.insurance), bad_debt: f(r.state.badDebt), bond_used: f(r.state.bondUsed), blind: f(r.state.blind), new_blind: f(next.blind),
       deltas: slots.map((s) => {
         const d = s?.opening ?? blank;
-        return { is_short: f(d.isShort), size: f(d.size), remove: f(d.remove), ins_in: f(d.insIn ?? 0n), claim: f(d.claim ?? 0n), rec_nonce: f(d.recNonce) };
+        return { is_short: f(d.isShort), size: f(d.size), kind: f(d.kind), ins_in: f(d.insIn ?? 0n), claim: f(d.claim ?? 0n), rec_nonce: f(d.recNonce) };
       }),
       eph: ephs.map(f),
       deployment: f(r.deployment), market: f(r.market), head: f(r.head), new_head: f(newHead), count: f(BigInt(r.deltas.length)),
       delta_cm: slots.map((s) => f(s?.commitment ?? 0n)), dt: f(r.dt), mark: f(r.mark), max_rate_wad: f(r.maxRateWad),
       index_mag: f(mag), index_neg: f(neg), claim_ratio: f(folded.ratio), bond_total: f(r.bondTotal ?? 0n), keys: r.keys.map((k) => [f(k.x), f(k.y)]), ct: cts.map((c) => c.map(f)),
+      bond_used_prev: f(r.state.bondUsed), bond_used_next: f(next.bondUsed),
     },
-    publicInputs: { market: r.market, newHead: toHex32(newHead), asOf: r.asOf, indexMag: mag, indexNeg: neg, claimRatio: folded.ratio, ciphertexts: cts.map((c) => c.map(toHex32)) },
+    publicInputs: {
+      market: r.market, newHead: toHex32(newHead), asOf: r.asOf, indexMag: mag, indexNeg: neg, claimRatio: folded.ratio, ciphertexts: cts.map((c) => c.map(toHex32)),
+      bondUsedPrev: r.state.bondUsed, bondUsedNext: next.bondUsed,
+    },
   };
 }

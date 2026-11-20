@@ -41,8 +41,8 @@ describe("KeyRing", () => {
   });
 
   it("opens a pool record by matching its head the same way", () => {
-    const state: PoolState = { r0: 4n, r1: 8n, supply: 2n, lastLeaf: 1n, blind: 3n };
-    const ct = encrypt([state.r0, state.r1, state.supply, state.lastLeaf, state.blind], mulGenerator(OLD), 321n);
+    const state: PoolState = { r0: 4n, r1: 8n, supply: 2n, lastLeaf: 1n, proto0: 5n, proto1: 6n, blind: 3n };
+    const ct = encrypt([state.r0, state.r1, state.supply, state.lastLeaf, state.proto0, state.proto1, state.blind], mulGenerator(OLD), 321n);
     const head = poolHead(DEPLOYMENT, 2n, state);
     expect(openPoolStateWith(new KeyRing([OLD, NEW]), ct, DEPLOYMENT, 2n, head)).toEqual({ value: state, keyIndex: 0 });
     expect(openPoolStateWith(new KeyRing([NEW]), ct, DEPLOYMENT, 2n, head)).toBeNull();
