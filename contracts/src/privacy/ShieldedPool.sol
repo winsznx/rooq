@@ -63,6 +63,9 @@ contract ShieldedPool is ReentrancyGuard {
     uint256 public rootSeq;
     mapping(bytes32 => uint256) public rootSeqOf;
     mapping(bytes32 => bool) public nullifierSpent;
+    /// @notice Hiding parts already used by a deposit. A repeat would share a commitment and nullifier with the first,
+    ///         locking one of the two notes for good.
+    mapping(bytes32 => bool) public usedInner;
 
     error UnsupportedAsset(address asset);
     error BadAmount();
@@ -73,6 +76,8 @@ contract ShieldedPool is ReentrancyGuard {
     error NullifierSpent(bytes32 nullifier);
     error InvalidProof();
     error TreeFull();
+    error InnerReused(bytes32 inner);
+    error BadCount(uint256 count, uint256 pending);
 
     event Shielded(uint256 indexed leafIndex, address indexed asset, uint256 amount, bytes32 inner, address indexed from);
     event NotesCreated(uint256 indexed firstLeafIndex, bytes32[3] commitments, bytes32[NOTE_CT_LEN][3] ciphertexts);
@@ -93,11 +98,14 @@ contract ShieldedPool is ReentrancyGuard {
     }
 
     /// @notice Moves `amount` of `asset` into the pool as a FREE note whose hiding part is `inner`.
-    ///         Asset, amount and sender are public; the note owner is not.
+    ///         Asset, amount and sender are public; the note owner is not. An `inner` can be used once, whatever the
+    ///         asset or amount, since reuse would also link the two deposits publicly.
     function shield(address asset, uint256 amount, bytes32 inner) external nonReentrant returns (uint256 leafIndex) {
         if (!isSupported[asset]) revert UnsupportedAsset(asset);
         if (amount == 0 || amount > MAX_AMOUNT) revert BadAmount();
         if (uint256(inner) >= FIELD) revert NotAFieldElement();
+        if (usedInner[inner]) revert InnerReused(inner);
+        usedInner[inner] = true;
         IERC20 token = IERC20(asset);
         uint256 before = token.balanceOf(address(this));
         token.safeTransferFrom(msg.sender, address(this), amount);
@@ -107,12 +115,14 @@ contract ShieldedPool is ReentrancyGuard {
         emit Shielded(leafIndex, asset, amount, inner, msg.sender);
     }
 
-    /// @notice Inserts the next queued entries into the tree. Permissionless: the proof needs no secrets.
-    function processQueue(bytes calldata proof, bytes32 newRoot) external {
+    /// @notice Inserts the next `count` queued entries into the tree. Permissionless: the proof needs no secrets.
+    ///         The caller names the count it proved for, so entries pushed while the proof is in flight cannot change
+    ///         its public inputs.
+    function processQueue(bytes calldata proof, bytes32 newRoot, uint256 count) external {
         uint256 start = processed;
-        uint256 count = _queue.length - start;
-        if (count == 0) revert NothingQueued();
-        if (count > APPEND_BATCH) count = APPEND_BATCH;
+        uint256 pending = _queue.length - start;
+        if (pending == 0) revert NothingQueued();
+        if (count == 0 || count > pending || count > APPEND_BATCH) revert BadCount(count, pending);
         if (uint256(newRoot) >= FIELD) revert NotAFieldElement();
 
         bytes32[] memory inputs = new bytes32[](4 + 4 * APPEND_BATCH);

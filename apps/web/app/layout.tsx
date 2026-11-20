@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import "./globals.css";
+import { AnalyticsBeacon } from "@/components/analytics/beacon";
 import { Providers } from "@/lib/providers";
 import { THEME_BOOTSTRAP } from "@/lib/theme";
 
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           Skip to content
         </a>
         <Providers>{children}</Providers>
+        <AnalyticsBeacon />
       </body>
     </html>
   );

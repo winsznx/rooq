@@ -2,11 +2,11 @@
  * Keeps maker locks posted with configured terms, funded from a shielded wallet. Locks go out through the relayer, so the
  * maker's own funding address never links its fills together on chain (D-01). All state is the wallet rebuilt from chain.
  */
-import { lockAddressKeys, lockWitness, addressOf, lockCommitment, recNullifier, releaseWitness, ROLE_MAKER, makerTerms, type HeldLock } from "@rooq/private-sdk";
+import { lockAddressKeys, lockWitness, addressOf, lockCommitment, MAX_MAKER_LIFETIME, recNullifier, releaseWitness, ROLE_MAKER, makerTerms, type HeldLock } from "@rooq/private-sdk";
 import { sleep } from "../lib/chain";
 import { intEnv, PORTS, requireEnv, takeScalar } from "../lib/config";
 import { Provers } from "../lib/provers";
-import { encodeRelayBody } from "../lib/relay-codec";
+import { encodeRelayBody, SERVICE_TOKEN_HEADER, serviceTokenTransportAllowed } from "../lib/relay-codec";
 import { runService, type ServiceContext } from "../lib/service";
 import { ShieldedWallet, type SpendableNote } from "../lib/wallet";
 import { errorMessage } from "../lib/log";
@@ -26,6 +26,8 @@ interface MakerConfig {
   /** A lock this close to expiry is not counted, so a replacement goes up before it stops being usable. */
   readonly renewBeforeSeconds: bigint;
   readonly relayerUrl: string;
+  /** Marks the maker's own relays as operator traffic, which the relayer waives instead of charging its free allowance. */
+  readonly relayerToken: string | null;
 }
 
 function parseTerms(raw: string): MakerTerms[] {
@@ -55,7 +57,9 @@ class MakerService {
   }
 
   private async relay(action: string, proof: Uint8Array, publicInputs: unknown): Promise<string> {
-    const res = await fetch(`${this.cfg.relayerUrl}/v1/relay/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: encodeRelayBody(proof, publicInputs) });
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (this.cfg.relayerToken) headers[SERVICE_TOKEN_HEADER] = this.cfg.relayerToken;
+    const res = await fetch(`${this.cfg.relayerUrl}/v1/relay/${action}`, { method: "POST", headers, body: encodeRelayBody(proof, publicInputs) });
     const body = (await res.json()) as { id?: string; status?: string; reasonCode?: string };
     if (!res.ok || !body.id) throw new Error(`relayer refused ${action}: ${body.reasonCode ?? res.status}`);
     for (let i = 0; i < 300; i++) {
@@ -108,6 +112,13 @@ class MakerService {
     let target = 0;
     for (const t of this.cfg.terms) {
       target += t.locks;
+      // A market created after startup is checked once it is known; until then nothing is posted for it.
+      const market = chain.market(t.market);
+      if (!market) continue;
+      if (t.closeSpreadBps > market.maxCloseSpreadBps) {
+        blocked = "CLOSE_SPREAD_ABOVE_CAP";
+        continue;
+      }
       for (let have = liveByMarket(t.market); have < t.locks; have++) {
         const notes = this.wallet.notes(ledger.records, ledger.deposits, ledger.processed, (nf) => ledger.isSpent(nf));
         const inputs = this.fundingNotes(notes, t.amount);
@@ -118,7 +129,7 @@ class MakerService {
         const payoutIndex = Math.max(this.nextIndexFloor, this.wallet.usedAddresses(ledger.records).next);
         const w = lockWitness({
           keys: inputs[0]!.keys, deployment: chain.deploymentId, tree: ledger.tree, asset: BigInt(chain.asset), inputs, amount: t.amount,
-          terms: makerTerms(t.market, t.spreadBps, t.maxSize, t.closeSpreadBps), expiry: now + this.cfg.ttlSeconds,
+          terms: makerTerms(t.market, t.spreadBps, t.maxSize, t.closeSpreadBps), expiry: now + this.cfg.ttlSeconds, asOf: now,
           coordinator: chain.coordinator, riskKeys: chain.riskKeys, payout: addressOf(lockAddressKeys(this.wallet.seed, payoutIndex)), view: this.wallet.main.pk,
         });
         try {
@@ -151,10 +162,20 @@ await runService({
     const env = process.env;
     const cfg: MakerConfig = {
       terms: parseTerms(requireEnv(env, "MAKER_TERMS")),
-      ttlSeconds: BigInt(intEnv(env, "MAKER_LOCK_TTL_S", 30 * 86_400, 60)),
+      // Under the lock circuit's 30-day maker cap, measured from the block time the lock is proved at.
+      ttlSeconds: BigInt(intEnv(env, "MAKER_LOCK_TTL_S", 29 * 86_400, 60)),
       renewBeforeSeconds: BigInt(intEnv(env, "MAKER_RENEW_BEFORE_S", 3_600, 0)),
-      relayerUrl: (env.MAKER_RELAYER_URL ?? `http://127.0.0.1:${PORTS.relayer}`).replace(/\/+$/, ""),
+      relayerUrl: (env.MAKER_RELAYER_URL || `http://127.0.0.1:${PORTS.relayer}`).replace(/\/+$/, ""),
+      relayerToken: env.MAKER_RELAYER_TOKEN || null,
     };
+    if (cfg.relayerToken && !serviceTokenTransportAllowed(cfg.relayerUrl)) {
+      throw new Error("MAKER_RELAYER_URL must be https or loopback while MAKER_RELAYER_TOKEN is set, so the token never crosses a network in clear");
+    }
+    if (cfg.ttlSeconds > MAX_MAKER_LIFETIME) throw new Error(`MAKER_LOCK_TTL_S is above the ${MAX_MAKER_LIFETIME} s maker lock lifetime`);
+    for (const t of cfg.terms) {
+      const market = ctx.chain.market(t.market);
+      if (market && t.closeSpreadBps > market.maxCloseSpreadBps) throw new Error(`MAKER_TERMS close spread for market ${t.market} is above its ${market.maxCloseSpreadBps} bps cap`);
+    }
     const provers = new Provers(ctx.config.proverThreads);
     const service = new MakerService(ctx, takeScalar(env, "MAKER_SEED"), cfg, provers);
     return { tick: () => service.tick(), shutdown: () => provers.destroyAll() };

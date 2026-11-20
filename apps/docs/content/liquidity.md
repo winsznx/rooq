@@ -10,6 +10,8 @@ You pick a pool, two amounts and an expiry. Rooq makes two private locks, then t
 
 Pool reserves are private, so the app works from a rounded price when it suggests amounts.
 
+The operator can read your request and could trade ahead of it to move the pool price before your deposit goes in. To limit that, the app reads the pool price when you submit and only lets the deposit run if the pool mints at least the shares that price implies, less your slippage limit from Settings. If the price moves further, or the pool has earned more in fees than that limit, the deposit doesn't run and your tokens come back at expiry. That price comes from Rooq's operator, so it narrows the risk rather than removing it.
+
 The very first deposit leaves a small amount of share supply locked in the pool for good, 1,000 units. This protects the pool's math from manipulation when it's nearly empty.
 
 ## What you earn
@@ -30,7 +32,7 @@ Removing is a private request you sign with the minimum amounts you'll accept.
 2. The operator fills it.
 3. Your tokens arrive as private notes.
 
-If the operator ignores the request past expiry, your share goes back to idle, and you can try again. Reserves are private, so Rooq can't work out minimums for you. If you leave them blank, you accept any amount the pool pays.
+If the operator ignores the request past expiry, your share goes back to idle, and you can try again. If you leave the minimums blank, the app sets them from the current pool price and your slippage limit, which stops the operator moving the price far against you before it fills the request. That price comes from Rooq's operator, so check it against the market if the amount matters, and enter your own minimums if you want a tighter bound.
 
 ```who-sees
 Public chain | - That a pool changed. Not your share or the amounts

@@ -30,6 +30,11 @@ export interface ServiceContext {
 export interface ServiceDefinition {
   readonly name: string;
   readonly port: number;
+  /**
+   * False for a service that keeps its own chain index: the loop then skips the Ledger replay and created-market sync, and
+   * `ctx.ledger` stays empty. Health reports the service's own `progress()` instead.
+   */
+  readonly ledger?: false;
   /** Runs once after the chain context opens, before the first tick; the place to load keys and check them. */
   init(ctx: ServiceContext): Promise<ServiceHandlers> | ServiceHandlers;
 }
@@ -38,15 +43,22 @@ export interface ServiceHandlers {
   readonly routes?: readonly Route[];
   /** One round of work after the ledger has been synced. */
   tick?(): Promise<void>;
+  /** Chain progress for health, when the service does not use the Ledger. */
+  progress?(): SyncProgress;
   shutdown?(): Promise<void>;
+}
+
+export interface SyncProgress {
+  readonly head: bigint;
+  readonly syncedBlock: bigint | null;
 }
 
 const startedAt = Date.now();
 
-function bodyOf(ctx: ServiceContext, state: LoopState): { body: Record<string, unknown>; ok: boolean } {
+function bodyOf(ctx: ServiceContext, state: LoopState, progress: SyncProgress): { body: Record<string, unknown>; ok: boolean } {
   const lastTickAgeMs = state.lastTickAt ? Date.now() - state.lastTickAt : null;
-  const synced = ctx.ledger.syncedBlock;
-  const lag = synced === null ? null : ctx.ledger.head - synced;
+  const synced = progress.syncedBlock;
+  const lag = synced === null ? null : progress.head - synced;
   const ok = state.lastTickAt !== null && lastTickAgeMs !== null && lastTickAgeMs < state.staleAfterMs && state.lastError === null;
   return {
     ok,
@@ -56,7 +68,7 @@ function bodyOf(ctx: ServiceContext, state: LoopState): { body: Record<string, u
       pid: process.pid,
       uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
       chainId: ctx.chain.chain.id,
-      lastBlockSeen: ctx.ledger.head,
+      lastBlockSeen: progress.head,
       syncedBlock: synced,
       lagBlocks: lag,
       lastTickAgeMs,
@@ -118,7 +130,7 @@ export async function runService(def: ServiceDefinition, env: Env = process.env)
     method: "GET",
     pattern: "/health",
     handler: () => {
-      const { body, ok } = bodyOf(ctx, state);
+      const { body, ok } = bodyOf(ctx, state, handlers.progress?.() ?? { head: ctx.ledger.head, syncedBlock: ctx.ledger.syncedBlock });
       return json(body, ok ? 200 : 503);
     },
   };
@@ -137,8 +149,10 @@ export async function runService(def: ServiceDefinition, env: Env = process.env)
   while (running) {
     try {
       await chain.refreshKeys();
-      await ledger.sync();
-      await chain.syncCreatedMarkets(ledger.createdMarkets.map((m) => m.market));
+      if (def.ledger !== false) {
+        await ledger.sync();
+        await chain.syncCreatedMarkets(ledger.createdMarkets.map((m) => m.market));
+      }
       await handlers.tick?.();
       state.lastTickAt = Date.now();
       state.lastError = null;

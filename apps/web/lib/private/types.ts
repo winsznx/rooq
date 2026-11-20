@@ -1,5 +1,6 @@
 import type { Hex } from "viem";
 import type { OperationKind, OperationStage, OperationStep } from "@/lib/operations";
+import type { ChangeGate } from "./position-gate";
 
 /** Everything here crosses from the wallet worker to the page. No spending key, viewing key or seed appears in any of it. */
 
@@ -27,6 +28,8 @@ export interface MarketView {
   readonly scale: bigint;
   readonly takerFeeBps: bigint;
   readonly maxPairSize: bigint;
+  /** Market cap on a maker's close spread: the worst spread a taker can be charged at close. Null where the deployment has none. */
+  readonly maxCloseSpreadBps: bigint | null;
   readonly maxOiUsdWad: bigint;
   readonly maxFundingPerHourWad: bigint;
   readonly fundingIndex: bigint;
@@ -138,6 +141,8 @@ export interface PositionView {
   readonly versions: number;
   readonly funding: readonly FundingEntry[];
   readonly exitMatureAt: bigint | null;
+  /** What the owner may change now. Null when the market isn't listed. */
+  readonly gate: ChangeGate | null;
   readonly outcome: { readonly payout: bigint | null; readonly mark: bigint | null; readonly mode: bigint | null; readonly block: bigint | null } | null;
 }
 
@@ -160,8 +165,9 @@ export interface LpView {
   readonly shares: bigint;
   readonly status: LpStatus;
   readonly expiry: bigint;
-  readonly min0: bigint;
-  readonly min1: bigint;
+  /** While removing: the band (WAD, token1 base units per token0 base unit) the removal runs in. */
+  readonly priceLo: bigint;
+  readonly priceHi: bigint;
 }
 
 export type ActivityKind = "shield" | "unshield" | "transfer_in" | "open" | "update" | "close" | "liquidated" | "forced" | "swap" | "refund" | "lp_add" | "lp_remove" | "claim";
@@ -213,6 +219,8 @@ export interface PrivateView {
   readonly claims: readonly ClaimView[];
   readonly lp: readonly LpView[];
   readonly activity: readonly ActivityEntry[];
+  /** The account is on an old deployment this build can only read. */
+  readonly legacy: boolean;
 }
 
 export interface OpIcon {
@@ -251,8 +259,8 @@ export type Intent =
   | { t: "makerLock"; market: bigint; spreadBps: bigint; maxSize: bigint; closeSpreadBps: bigint; amount: bigint; expiry: bigint }
   | { t: "release"; lock: Hex }
   | { t: "swap"; pool: bigint; secondPool: bigint; assetIn: Hex; amountIn: bigint; minOut: bigint; expiry: bigint; estimatedOut: bigint }
-  | { t: "lpAdd"; pool: bigint; amount0: bigint; amount1: bigint; minShares: bigint; expiry: bigint }
-  | { t: "lpRequest"; claim: Hex; min0: bigint; min1: bigint; expiry: bigint }
+  | { t: "lpAdd"; pool: bigint; amount0: bigint; amount1: bigint; priceLo: bigint; priceHi: bigint; expiry: bigint }
+  | { t: "lpRequest"; claim: Hex; priceLo: bigint; priceHi: bigint; expiry: bigint }
   | { t: "lpRecover"; claim: Hex }
   | { t: "update"; position: string; add: bigint; remove: bigint; reduce: bigint }
   | { t: "close"; position: string }
@@ -281,10 +289,12 @@ export type WorkerRequest =
   | { m: "forgetRemembered" }
   | { m: "lock" }
   | { m: "prepareShield"; asset: Hex; amount: bigint }
-  | { m: "shieldFinished"; depositIndex: number; ok: boolean }
+  | { m: "shieldSent"; depositIndex: number; hash: Hex }
+  | { m: "shieldFinished"; depositIndex: number }
   | { m: "start"; op: StartOp }
   | { m: "retryOp"; id: string }
   | { m: "readMark"; market: bigint }
+  | { m: "readPoolOracle"; pool: bigint; market: bigint | null }
   | { m: "cancelOp"; id: string }
   | { m: "directOp"; id: string }
   | { m: "walletTxSent"; id: string; hash: Hex }

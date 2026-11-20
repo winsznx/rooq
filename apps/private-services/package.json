@@ -12,6 +12,8 @@
     "risk": "bun run src/services/risk.ts",
     "maker": "bun run src/services/maker.ts",
     "price-relay": "bun run src/services/price-relay.ts",
+    "analytics": "bun run src/services/analytics.ts",
+    "key-pop": "bun run src/key-pop.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test test/unit",
     "test:integration": "bun run test/integration.ts"

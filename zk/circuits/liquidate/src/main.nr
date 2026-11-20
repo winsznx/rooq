@@ -14,9 +14,9 @@
 // winner receives a CLAIM record, created in every liquidation so its presence reveals nothing. funding_epoch folds the
 // change and fixes the pro-rata ratio that pays the claim.
 use rooq_zk::{
-    assert_amount, below, encrypt, fee, FREE_DOMAIN, margin_requirement, merkle_root, min, note_commitment, note_inner,
-    NOTE_CT_LEN, oi_delta, output_rho, owner_tag, Pair, pair_pnl, point, PRICE_BITS, rec_nonce, rec_nullifier, settle_funding,
-    TREE_DEPTH, Claim, CLAIM_CT_LEN,
+    assert_amount, encrypt, fee, FREE_DOMAIN, maintenance, merkle_root, min, note_commitment, note_inner, NOTE_CT_LEN,
+    OI_CLOSE, oi_delta, output_rho, owner_tag, Pair, point, PRICE_BITS, rec_nonce, rec_nullifier, settle_funding, TREE_DEPTH,
+    Claim, CLAIM_CT_LEN,
 };
 use std::embedded_curve_ops::EmbeddedCurvePoint;
 
@@ -60,13 +60,9 @@ fn main(
     let (taker_pays, taker_margin, maker_margin, unpaid) =
         (settled.taker_pays, settled.taker_margin, settled.maker_margin, settled.unpaid);
 
-    let mm = margin_requirement(pair.size, mark, mmr_wad, scale);
-    let pnl = pair_pnl(pair.is_short, pair.size, pair.entry, mark, scale);
-    let taker_required = if taker_pays { mm + unpaid } else { mm };
-    let maker_required = if taker_pays { mm } else { mm + unpaid };
-    let taker_bad = below(taker_margin, pnl.taker_gains, pnl, taker_required);
-    let maker_bad = below(maker_margin, !pnl.taker_gains, pnl, maker_required);
-    assert(taker_bad | maker_bad, "pair is healthy");
+    let hl = maintenance(pair, settled, mark, mmr_wad, scale);
+    let (taker_bad, pnl) = (hl.taker_bad, hl.pnl);
+    assert(taker_bad | hl.maker_bad, "pair is healthy");
 
     // D-03: unpaid funding comes out of the payer's own gain before any of it is transferred.
     let netted = if taker_pays == pnl.taker_gains { min(pnl.floor, unpaid) } else { 0 };
@@ -122,7 +118,7 @@ fn main(
         assert_eq(encrypt([FREE_DOMAIN, asset, value, rho, blind[i]], pk, eph[i]), ct[i]);
     }
 
-    assert_eq(oi_delta(deployment, market, pair.is_short, pair.size, 1, to_insurance, shortfall, pair.rec_nonce), delta_cm);
+    assert_eq(oi_delta(deployment, market, pair.is_short, pair.size, OI_CLOSE, to_insurance, shortfall, pair.rec_nonce), delta_cm);
     let (winner_auth, winner_x, winner_y) = if pnl.taker_gains {
         (pair.taker_auth, pair.taker_x, pair.taker_y)
     } else {

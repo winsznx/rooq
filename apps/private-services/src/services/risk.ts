@@ -4,7 +4,7 @@
  * no owner key, and close matured forced exits. The shared nullifier means a lost race is expected, not an error.
  */
 import {
-  ACTOR_NONE, addressOf, BPS, bondReleaseWitness, claimCommitment, KeyRing, LOCK_CT_LEN, openLock, insuranceSweepWitness, lockCommitment, redeemWitness, RECORD_LOCK, ROLE_LP, ROLE_SWAP, toHex32, CLAIM_CT_LEN, CLOSE_DEAD_ORACLE, CLOSE_MATURED, closeWitness, deriveKeys, fundingEpochWitness, liquidateWitness, liquidationOutcome, MARKET_CT_LEN, OI_BATCH, openClaim, openMarketState, openPair, oiDeltaCommitment, PAIR_CT_LEN, pairCommitment,
+  ACTOR_NONE, addressOf, BPS, MIN_UPDATE_GAP, nextUpdateAt, OI_CLOSE, OI_OPEN, OI_REDUCE, bondReleaseWitness, claimCommitment, KeyRing, LOCK_CT_LEN, openLock, insuranceSweepWitness, lockCommitment, redeemWitness, RECORD_LOCK, ROLE_LP, ROLE_SWAP, toHex32, CLAIM_CT_LEN, CLOSE_DEAD_ORACLE, CLOSE_MATURED, closeWitness, deriveKeys, fundingEpochWitness, liquidateWitness, liquidationOutcome, MARKET_CT_LEN, OI_BATCH, openClaim, openMarketState, openPair, oiDeltaCommitment, PAIR_CT_LEN, pairCommitment,
   randomField, RECORD_CLAIM, RECORD_PAIR, recNullifier, updateOutcome, updateWitness,
   type ClaimRecord, type HeldLock, type LockRecord, type MarketState, type OiDelta, type PairRecord, type PrivateAddress, type RingHit,
 } from "@rooq/private-sdk";
@@ -17,6 +17,7 @@ import { Sender, type TxOutcome } from "../lib/sender";
 import { runService, type ServiceContext } from "../lib/service";
 import type { Reason } from "../lib/errors";
 import type { Route } from "../lib/http";
+import { countAfter, currentKeySince, retiredDeltas, retiredUnspent, type DeltaSource } from "../lib/key-health";
 import { quoteRoute, releaseExpiredLocks, SpotExecutor, type LpHeld } from "../lib/spot-exec";
 
 type WorkerId = "A" | "B";
@@ -29,9 +30,13 @@ interface HeldPair {
 }
 
 const RACE_REASONS: ReadonlySet<Reason> = new Set<Reason>(["NULLIFIER_SPENT"]);
+/** The lineage froze under the proof: a matured exit request now owns it, and the forced close takes over. */
+const FROZEN_REASONS: ReadonlySet<Reason> = new Set<Reason>(["EXIT_MATURED"]);
 const RETRY_REASONS: ReadonlySet<Reason> = new Set<Reason>(["INVALID_PROOF", "UNKNOWN_ROOT", "STALE_AS_OF", "RPC_UNAVAILABLE"]);
 const ORACLE_DEAD_AFTER = 14n * 86_400n;
 const INSURANCE_SWEEP_AFTER = 90n * 86_400n;
+
+const KEYLESS_UPDATE = { actor: ACTOR_NONE, add: 0n, remove: 0n, reduce: 0n } as const;
 
 class RiskWorker {
   private readonly slotPair: number;
@@ -41,7 +46,12 @@ class RiskWorker {
   private readonly pairCache = new Map<bigint, RingHit<PairRecord> | null>();
   private readonly claimCache = new Map<bigint, RingHit<ClaimRecord> | null>();
   private readonly marketStates = new Map<bigint, RingHit<MarketState>>();
-  private unreadableRecords = 0;
+  /** Block of each lock, pair and claim record no held key opens, in chain order. */
+  private unreadableBlocks: bigint[] = [];
+  /** OI delta commitments by `market:index`. A queue entry never changes, so each is read once per ledger generation. */
+  private readonly deltaCache = new Map<string, bigint>();
+  /** Unfolded delta commitments per market, as of the last tick, for key health. */
+  private readonly pendingDeltas = new Map<bigint, readonly bigint[]>();
   private generation = -1;
   private scanned = 0;
   private pairs: { record: PairRecord; leafIndex: number; keyIndex: number }[] = [];
@@ -65,6 +75,8 @@ class RiskWorker {
   private readonly queueFallbackMs: number;
   private queueBacklogSince: number | null = null;
   private readonly settleDueSince = new Map<bigint, number>();
+  /** When each market's queue last filled a batch, keyed to the fold count it was seen at. */
+  private readonly batchFullSince = new Map<bigint, { consumed: bigint; at: number }>();
 
   constructor(
     private readonly ctx: ServiceContext,
@@ -73,6 +85,8 @@ class RiskWorker {
     private readonly rewardTo: PrivateAddress,
     private readonly sender: Sender,
     private readonly provers: Provers,
+    /** PrivatePairs.MIN_UPDATE_GAP: a keyless update of a pair waits this long after its last version. */
+    private readonly minGap: bigint,
   ) {
     this.riskSlot = id === "A" ? 0 : 1;
     this.slotPair = id === "A" ? 2 : 3;
@@ -99,7 +113,8 @@ class RiskWorker {
       this.pairs = [];
       this.claims = [];
       this.locks = [];
-      this.unreadableRecords = 0;
+      this.unreadableBlocks = [];
+      this.deltaCache.clear();
     }
     for (; this.scanned < ledger.records.length; this.scanned++) {
       const r = ledger.records[this.scanned]!;
@@ -110,7 +125,7 @@ class RiskWorker {
           this.lockCache.set(r.commitment, l);
         }
         if (l) this.locks.push({ record: l.value, leafIndex: r.leafIndex, keyIndex: l.keyIndex });
-        else this.unreadableRecords++;
+        else this.unreadableBlocks.push(r.block);
       } else if (r.kind === RECORD_PAIR) {
         let p = this.pairCache.get(r.commitment);
         if (p === undefined) {
@@ -118,7 +133,7 @@ class RiskWorker {
           this.pairCache.set(r.commitment, p);
         }
         if (p) this.pairs.push({ record: p.value, leafIndex: r.leafIndex, keyIndex: p.keyIndex });
-        else this.unreadableRecords++;
+        else this.unreadableBlocks.push(r.block);
       } else if (r.kind === RECORD_CLAIM) {
         let c = this.claimCache.get(r.commitment);
         if (c === undefined) {
@@ -126,7 +141,7 @@ class RiskWorker {
           this.claimCache.set(r.commitment, c);
         }
         if (c) this.claims.push({ record: c.value, leafIndex: r.leafIndex, keyIndex: c.keyIndex });
-        else this.unreadableRecords++;
+        else this.unreadableBlocks.push(r.block);
       }
     }
   }
@@ -163,18 +178,22 @@ class RiskWorker {
     return this.ring.indexOf(this.ctx.chain.riskKeys[this.riskSlot]);
   }
 
-  /** Reports what still depends on a retired key. When `retiredKeyRecords` reaches zero on both workers, that key can be retired for good. */
+  /**
+   * Reports what still depends on a retired key. When `retiredKeyRecords` reaches zero on both workers, that key can be retired
+   * for good. It counts unspent pairs, claims and locks wherever they sit in the queue, and unfolded OI deltas that can only be
+   * opened from a retired-key record (a spent pair's open, close or liquidation delta). Records no key opens count only from
+   * the current key's activation on, since older ones go dark by design once a retired key is destroyed.
+   */
   private keyHealth(): { keysHeld: number; currentKeyHeld: boolean; retiredKeyRecords: number; unreadableRecords: number } {
     const { chain, ledger } = this.ctx;
     const current = this.currentKeyIndex();
-    let retired = 0;
-    for (const h of this.livePairs()) if (h.keyIndex !== current) retired++;
-    for (const c of this.claims) {
-      if (c.keyIndex !== current && c.record.amount !== 0n && !ledger.isSpent(recNullifier(claimCommitment(chain.deploymentId, c.record), c.record.recNonce))) retired++;
-    }
-    for (const l of this.locks) {
-      if (l.keyIndex !== current && !ledger.isSpent(recNullifier(lockCommitment(chain.deploymentId, l.record), l.record.recNonce))) retired++;
-    }
+    const slotKey = chain.riskKeys[this.riskSlot];
+    const since = currentKeySince(chain.genesisKeys, ledger.keyRotations, this.riskSlot === 0 ? "riskA" : "riskB", slotKey);
+    let retired = retiredUnspent(this.pairs, current, (p) => ledger.isSpent(recNullifier(pairCommitment(chain.deploymentId, p.record), p.record.recNonce)));
+    retired += retiredUnspent(this.claims.filter((c) => c.record.amount !== 0n), current, (c) => ledger.isSpent(recNullifier(claimCommitment(chain.deploymentId, c.record), c.record.recNonce)));
+    retired += retiredUnspent(this.locks, current, (l) => ledger.isSpent(recNullifier(lockCommitment(chain.deploymentId, l.record), l.record.recNonce)));
+    const pending = [...this.pendingDeltas.values()].flat();
+    if (pending.length > 0) retired += retiredDeltas(pending, this.deltaOpenings(), current);
     let unreadableMarkets = 0;
     for (const m of chain.markets) {
       const last = ledger.latestFunding(m.id);
@@ -183,8 +202,26 @@ class RiskWorker {
       if (!hit) unreadableMarkets++;
       else if (hit.keyIndex !== current) retired++;
     }
-    const spot = chain.spot ? this.spot.retiredKeyRecords(current) : { retired: 0, unreadable: 0 };
-    return { keysHeld: this.ring.keys.length, currentKeyHeld: current !== -1, retiredKeyRecords: retired + spot.retired, unreadableRecords: this.unreadableRecords + unreadableMarkets + spot.unreadable };
+    const spot = chain.spot ? this.spot.retiredKeyRecords(current, since) : { retired: 0, unreadable: 0 };
+    return {
+      keysHeld: this.ring.keys.length, currentKeyHeld: current !== -1, retiredKeyRecords: retired + spot.retired,
+      unreadableRecords: countAfter(this.unreadableBlocks, since) + unreadableMarkets + spot.unreadable,
+    };
+  }
+
+  /** Delta commitments at indices [from, to) of a market's OI queue, reading only the ones not seen before. */
+  private async deltaCommitments(market: bigint, from: bigint, to: bigint): Promise<bigint[]> {
+    const out: bigint[] = [];
+    for (let i = from; i < to; i++) {
+      const key = `${market}:${i}`;
+      let commitment = this.deltaCache.get(key);
+      if (commitment === undefined) {
+        commitment = await this.ctx.chain.oiDelta(market, i);
+        this.deltaCache.set(key, commitment);
+      }
+      out.push(commitment);
+    }
+    return out;
   }
 
   /** Counts a race lost as such and everything else by its name, so a health check shows real failures only. */
@@ -200,12 +237,28 @@ class RiskWorker {
       this.ctx.log.info("race_lost", { action: what, status: outcome.status });
       return "lost";
     }
+    if (FROZEN_REASONS.has(outcome.revert.reason)) {
+      this.ctx.bump("frozenLineages");
+      this.ctx.log.info("lineage_frozen", { action: what, reason: outcome.revert.reason });
+      return "lost";
+    }
     if (RETRY_REASONS.has(outcome.revert.reason)) {
       this.ctx.bump("reproved");
+      this.ctx.log.info("action_retry", { action: what, reason: outcome.revert.reason });
       return "retry";
     }
     this.ctx.log.warn("action_failed", { action: what, reason: outcome.revert.reason });
     return "failed";
+  }
+
+  /** True once this worker's stagger has passed since the market's queue filled a batch at this fold count. */
+  private fullBatchStaggered(market: bigint, consumed: bigint): boolean {
+    let since = this.batchFullSince.get(market);
+    if (since?.consumed !== consumed) {
+      since = { consumed, at: Date.now() };
+      this.batchFullSince.set(market, since);
+    }
+    return Date.now() - since.at >= Number(this.staggerSeconds) * 1000;
   }
 
   private due(key: string): boolean {
@@ -259,20 +312,27 @@ class RiskWorker {
     const deltas: { opening: OiDelta; commitment: bigint }[] = [];
     if (count > funding.consumed) {
       const openings = this.deltaOpenings();
-      for (let i = funding.consumed; i < count && deltas.length < OI_BATCH; i++) {
-        const commitment = await chain.oiDelta(m.id, i);
-        const opening = openings.get(commitment);
-        if (!opening) {
-          log.warn("delta_unopenable", { market: m.id, index: i });
+      const end = count < funding.consumed + BigInt(OI_BATCH) ? count : funding.consumed + BigInt(OI_BATCH);
+      const commitments = await this.deltaCommitments(m.id, funding.consumed, end);
+      for (const [offset, commitment] of commitments.entries()) {
+        const source = openings.get(commitment);
+        if (!source) {
+          log.warn("delta_unopenable", { market: m.id, index: funding.consumed + BigInt(offset) });
           this.ctx.liveness.blocked = "DELTA_UNOPENABLE";
           return;
         }
-        deltas.push({ opening, commitment });
+        deltas.push({ opening: source.opening, commitment });
       }
     }
     const state = this.marketState(m.id);
     if (!state) {
       log.warn("market_state_unreadable", { market: m.id });
+      this.delay(`epoch:${m.id}`, 60_000);
+      return;
+    }
+    // The circuit binds the head's private bond draw to the public one the contract stores; a mismatch can't prove.
+    if (state.bondUsed !== funding.bondUsed) {
+      log.warn("bond_used_mismatch", { market: m.id });
       this.delay(`epoch:${m.id}`, 60_000);
       return;
     }
@@ -297,30 +357,48 @@ class RiskWorker {
     this.tally("epochs", outcome);
   }
 
-  /** Every pending change is the open, full close or partial reduce of a pair this key can read (test: pendingDeltas). */
-  private deltaOpenings(): Map<bigint, OiDelta> {
+  /**
+   * Every pending change is the open, full close or partial reduce of a pair this key can read (test: pendingDeltas). Each
+   * opening carries the ring keys of the records it was built from, so key health can tell which still need a retired key.
+   */
+  private deltaOpenings(): Map<bigint, DeltaSource<OiDelta>> {
     const { chain } = this.ctx;
-    const openings = new Map<bigint, OiDelta>();
-    const byNonce = new Map(this.pairs.map((p) => [p.record.recNonce, p.record]));
-    for (const { record: c } of this.claims) {
+    const openings = new Map<bigint, DeltaSource<OiDelta>>();
+    const byNonce = new Map(this.pairs.map((p) => [p.record.recNonce, p]));
+    for (const { record: c, keyIndex } of this.claims) {
       const parent = byNonce.get(c.pairNonce);
-      if (parent) openings.set(c.deltaCm, { isShort: parent.isShort, size: parent.size, remove: 1n, recNonce: c.pairNonce, insIn: c.insIn, claim: c.amount });
+      if (parent) {
+        openings.set(c.deltaCm, {
+          opening: { isShort: parent.record.isShort, size: parent.record.size, kind: OI_CLOSE, recNonce: c.pairNonce, insIn: c.insIn, claim: c.amount },
+          keyIndices: [keyIndex, parent.keyIndex],
+        });
+      }
     }
-    for (const { record: p } of this.pairs) {
-      for (const [size, remove] of [[p.size, 0n], [p.size, 1n], [p.lastReduce, 1n]] as const) {
-        openings.set(oiDeltaCommitment(chain.deploymentId, p.market, p.isShort, size, remove, p.recNonce), { isShort: p.isShort, size, remove, recNonce: p.recNonce });
+    for (const { record: p, keyIndex } of this.pairs) {
+      for (const [size, kind] of [[p.size, OI_OPEN], [p.size, OI_CLOSE], [p.lastReduce, OI_REDUCE]] as const) {
+        openings.set(oiDeltaCommitment(chain.deploymentId, p.market, p.isShort, size, kind, p.recNonce), { opening: { isShort: p.isShort, size, kind, recNonce: p.recNonce }, keyIndices: [keyIndex] });
       }
     }
     return openings;
   }
 
-  private async settleFunding(m: MarketInfo, h: HeldPair, mark: bigint, fundingIndex: bigint, counter = "fundingSettlements"): Promise<void> {
+  /**
+   * A keyless update: funding settlement, or a key migration that changes nothing else. `asOf` is the latest block time, which
+   * the contract accepts for two minutes; the cooldown and health rules are checked against it before proving.
+   */
+  private async settleFunding(m: MarketInfo, h: HeldPair, mark: bigint, fundingIndex: bigint, asOf: bigint, counter = "fundingSettlements"): Promise<void> {
     const { chain, ledger, log } = this.ctx;
     const noteOwner = deriveKeys(randomField());
     const witness = updateWitness({
-      pair: h.pair, leafIndex: h.leafIndex, deployment: chain.deploymentId, tree: ledger.tree, update: { actor: ACTOR_NONE, add: 0n, remove: 0n, reduce: 0n }, sk: 0n, noteOwner,
-      mark, imrWad: m.imrWad, scale: m.scale, feeBps: m.takerFeeBps, fundingIndex, riskKeys: chain.riskKeys, feeTo: chain.feeTo, carryExit: ledger.exitFor(h.nullifier) !== undefined,
+      pair: h.pair, leafIndex: h.leafIndex, deployment: chain.deploymentId, tree: ledger.tree, update: KEYLESS_UPDATE, sk: 0n, noteOwner,
+      mark, imrWad: m.imrWad, mmrWad: m.mmrWad, scale: m.scale, feeBps: m.takerFeeBps, fundingIndex, riskKeys: chain.riskKeys, feeTo: chain.feeTo, asOf, minGap: this.minGap,
+      carryExit: ledger.exitFor(h.nullifier) !== undefined,
     });
+    if (witness.outcome.refused !== null) {
+      log.info("settle_skipped", { market: m.id, reason: witness.outcome.refused });
+      this.delay(`settle:${h.nullifier}`, 30_000);
+      return;
+    }
     let proof;
     try {
       proof = await (await this.provers.get("pair_update")).prove(witness.inputs);
@@ -330,13 +408,26 @@ class RiskWorker {
       return;
     }
     const outcome = await this.sender.send("updatePair", [bytesToHex(proof.proof), { ...witness.publicInputs }]);
-    this.tally(counter, outcome);
+    log.info("keyless_update", { action: counter, market: m.id, result: this.tally(counter, outcome) });
+  }
+
+  /**
+   * Whether a keyless update can run now: outside the pair's cooldown, before any exit on it matures (the contract freezes the
+   * lineage then, so the forced close always lands), and leaving the pair healthy (a pair that would be liquidatable is left
+   * to liquidation).
+   */
+  private keylessUpdateAllowed(m: MarketInfo, h: HeldPair, mark: bigint, fundingIndex: bigint, asOf: bigint): boolean {
+    if (asOf < nextUpdateAt(h.pair, this.minGap)) return false;
+    const exit = this.ctx.ledger.exitFor(h.nullifier);
+    if (exit && asOf >= exit.matureAt) return false;
+    return updateOutcome(h.pair, KEYLESS_UPDATE, mark, m.imrWad, m.scale, fundingIndex, m.takerFeeBps, { mmrWad: m.mmrWad, asOf, minGap: this.minGap }).refused === null;
   }
 
   /** Whether accrued funding is worth a settlement, relative to the payer's margin. */
-  private settleDue(m: MarketInfo, p: PairRecord, mark: bigint, fundingIndex: bigint): boolean {
-    if (p.fundingIndex === fundingIndex) return false;
-    const o = updateOutcome(p, { actor: ACTOR_NONE, add: 0n, remove: 0n, reduce: 0n }, mark, m.imrWad, m.scale, fundingIndex, m.takerFeeBps);
+  private settleDue(m: MarketInfo, h: HeldPair, mark: bigint, fundingIndex: bigint, asOf: bigint): boolean {
+    const p = h.pair;
+    if (p.fundingIndex === fundingIndex || !this.keylessUpdateAllowed(m, h, mark, fundingIndex, asOf)) return false;
+    const o = updateOutcome(p, KEYLESS_UPDATE, mark, m.imrWad, m.scale, fundingIndex, m.takerFeeBps, { mmrWad: m.mmrWad, asOf, minGap: this.minGap });
     if (o.refused !== null || o.fundingOwed === 0n) return false;
     const payer = liquidationOutcome(p, mark, m.mmrWad, m.penaltyBps, m.scale, fundingIndex).takerPaysFunding ? p.takerMargin : p.makerMargin;
     return o.fundingOwed * BPS >= payer * this.settleMinBps;
@@ -377,9 +468,16 @@ class RiskWorker {
       if (!st || !price) continue;
       const count = await chain.oiDeltaCount(m.id);
       const pending = count - st.consumed;
+      this.pendingDeltas.set(m.id, await this.deltaCommitments(m.id, st.consumed, count));
       const age = now - st.lastEpoch;
       backlog.foldsPending += Number(pending);
-      const due = pending > 0n ? age >= this.foldGapSeconds + this.staggerSeconds : age >= this.epochIntervalSeconds + this.staggerSeconds;
+      // A full batch folds without waiting out the gap (#17), so churn can't build a backlog. The stagger still applies, so
+      // both workers don't prove the same epoch at once.
+      const full = pending >= BigInt(OI_BATCH);
+      if (!full) this.batchFullSince.delete(m.id);
+      const due = full
+        ? this.fullBatchStaggered(m.id, st.consumed)
+        : pending > 0n ? age >= this.foldGapSeconds + this.staggerSeconds : age >= this.epochIntervalSeconds + this.staggerSeconds;
       if (!due) continue;
       backlog.epochsDue++;
       if (this.due(`epoch:${m.id}`)) await this.advanceFunding(m, price);
@@ -400,6 +498,10 @@ class RiskWorker {
       if (this.due(`close:${h.nullifier}`)) await this.closeMatured(m, h, price.fresh ? CLOSE_MATURED : CLOSE_DEAD_ORACLE, price.fresh ? price.price : 0n, state.index);
     }
 
+    // Moving positions off a retired key goes first: the same keyless update also settles funding, so a settlement here would
+    // migrate the pair anyway and leave no record that it was a migration.
+    if ((await this.migratePairs(prices, now)) > 0) await ledger.sync();
+
     // Funding settlement with no owner key. A pending exit moves to the pair's next version with its deadline.
     for (const h of this.livePairs()) {
       const m = chain.market(h.pair.market);
@@ -407,15 +509,14 @@ class RiskWorker {
       const state = await chain.funding(h.pair.market);
       if (!m || !price) continue;
       const mark = price.fresh ? price.price : 0n;
-      if (mark === 0n || !this.settleDue(m, h.pair, mark, state.index)) continue;
+      if (mark === 0n || !this.settleDue(m, h, mark, state.index, now)) continue;
       backlog.settlementsDue++;
       const since = this.settleDueSince.get(h.nullifier) ?? Date.now();
       this.settleDueSince.set(h.nullifier, since);
       if (Date.now() - since < Number(this.staggerSeconds) * 1000 || !this.due(`settle:${h.nullifier}`)) continue;
-      await this.settleFunding(m, h, mark, state.index);
+      await this.settleFunding(m, h, mark, state.index, await chain.blockTime());
     }
 
-    await this.migratePairs(prices);
     await this.fallbackQueue();
     await this.redeemClaims();
     await this.sweepInsurance(now, prices);
@@ -440,28 +541,29 @@ class RiskWorker {
    * Moves positions still encrypted to a retired key onto the current keys with the same keyless update funding settlement uses. It changes
    * no margin or size and pays nothing to the worker, so it is safe to run without any owner online. Liquidatable pairs are left to liquidation.
    */
-  private async migratePairs(prices: ReadonlyMap<bigint, PriceRead>): Promise<void> {
+  private async migratePairs(prices: ReadonlyMap<bigint, PriceRead>, now: bigint): Promise<number> {
     const { chain } = this.ctx;
     const current = this.currentKeyIndex();
-    if (current === -1) return;
+    if (current === -1) return 0;
     let budget = this.migrateBudget;
     for (const h of this.livePairs()) {
-      if (budget === 0) return;
+      if (budget === 0) break;
       if (h.keyIndex === current) continue;
       const m = chain.market(h.pair.market);
       const price = prices.get(h.pair.market);
       if (!m || !price?.fresh) continue;
       const state = await chain.funding(h.pair.market);
-      const o = liquidationOutcome(h.pair, price.price, m.mmrWad, m.penaltyBps, m.scale, state.index);
-      if (o.takerBad || o.makerBad) continue;
+      // The cooldown (10 min after the pair's last version) and a matured exit both wait here rather than burn a proof.
+      if (!this.keylessUpdateAllowed(m, h, price.price, state.index, now)) continue;
       const key = `migrate:${h.nullifier}`;
       const since = this.settleDueSince.get(h.nullifier) ?? Date.now();
       this.settleDueSince.set(h.nullifier, since);
       if (Date.now() - since < Number(this.staggerSeconds) * 1000 || !this.due(key)) continue;
       budget--;
-      await this.settleFunding(m, h, price.price, state.index, "keyMigrations");
+      await this.settleFunding(m, h, price.price, state.index, await chain.blockTime(), "keyMigrations");
       this.delay(key, 30_000);
     }
+    return this.migrateBudget - budget;
   }
 
   /** Owners of a folded claim get paid with no action; the note can only go to the claim's committed owner. */
@@ -604,7 +706,9 @@ await runService({
     const rewardTo = rewardRaw ? parseRewardAddress(rewardRaw) : addressOf(deriveKeys(takeScalar(process.env, "RISK_REWARD_SEED")));
     const sender = new Sender(ctx.chain, takePrivateKey(process.env, "RISK_TX_KEY"), ctx.log);
     const provers = new Provers(ctx.config.proverThreads);
-    const worker = new RiskWorker(ctx, id, ring, rewardTo, sender, provers);
+    const minGap = await ctx.chain.read<bigint>("MIN_UPDATE_GAP");
+    if (minGap !== MIN_UPDATE_GAP) ctx.log.warn("min_update_gap_differs", { chain: minGap, sdk: MIN_UPDATE_GAP });
+    const worker = new RiskWorker(ctx, id, ring, rewardTo, sender, provers, minGap);
     const routes: Route[] = ctx.chain.spot ? [quoteRoute(worker.spot)] : [];
     return { routes, tick: () => worker.tick(), shutdown: () => provers.destroyAll() };
   },

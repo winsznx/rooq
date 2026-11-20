@@ -8,11 +8,16 @@
 // 1 whenever insurance covers everything, so it only reveals anything when a market is short. What remains unpaid is
 // bad debt, which stays in the private record.
 //
+// The bond draw is public (`bond_used_prev`, `bond_used_next`) so a creator can recover the unused bond 30 days after
+// close-only without any operator (audit #24). It moves only when a batch's claims exceed insurance.
+//
 // The rate uses open interest from before this batch, as ClearingHouse accrues before changing OI. Same integer
 // rules as RiskMath: each step truncates toward zero. `dt` and `mark` come from the contract.
 use rooq_zk::{
-    assert_amount, encrypt, floor_div, market_head, MARKET_CT_LEN, min, oi_delta, point, PRICE_BITS, SIZE_BITS, WAD,
+    assert_amount, encrypt, floor_div, market_head, MARKET_CT_LEN, min, OI_OPEN, oi_delta, point, PRICE_BITS, SIZE_BITS, WAD,
 };
+
+mod tests;
 
 global BATCH: u32 = 8;
 global KEYS: u32 = 3;
@@ -20,7 +25,7 @@ global KEYS: u32 = 3;
 struct Delta {
     is_short: Field,
     size: Field,
-    remove: Field,
+    kind: Field,
     ins_in: Field,
     claim: Field,
     rec_nonce: Field,
@@ -51,6 +56,8 @@ fn main(
     bond_total: pub Field,
     keys: pub [[Field; 2]; KEYS],
     ct: pub [[Field; MARKET_CT_LEN]; KEYS],
+    bond_used_prev: pub Field,
+    bond_used_next: pub Field,
 ) {
     if head == 0 {
         assert_eq(long_oi, 0, "fresh market has open interest");
@@ -67,6 +74,7 @@ fn main(
     assert_amount(bad_debt);
     assert_amount(bond_total);
     assert(!bond_total.lt(bond_used), "bond overdrawn");
+    assert_eq(bond_used, bond_used_prev, "wrong bond_used_prev");
     dt.assert_max_bit_size::<16>();
     mark.assert_max_bit_size::<PRICE_BITS>();
     max_rate_wad.assert_max_bit_size::<64>();
@@ -96,21 +104,22 @@ fn main(
         if i < n {
             let d = deltas[i];
             assert(d.is_short * (d.is_short - 1) == 0, "side is 0 or 1");
-            assert(d.remove * (d.remove - 1) == 0, "remove is 0 or 1");
+            assert(d.kind * (d.kind - 1) * (d.kind - 2) == 0, "unknown kind");
             d.size.assert_max_bit_size::<SIZE_BITS>();
             assert_amount(d.ins_in);
             assert_amount(d.claim);
-            assert_eq(oi_delta(deployment, market, d.is_short, d.size, d.remove, d.ins_in, d.claim, d.rec_nonce), delta_cm[i], "bad delta opening");
+            assert_eq(oi_delta(deployment, market, d.is_short, d.size, d.kind, d.ins_in, d.claim, d.rec_nonce), delta_cm[i], "bad delta opening");
             inflow += d.ins_in;
             claims += d.claim;
+            let opens = d.kind == OI_OPEN;
             if d.is_short == 0 {
-                if d.remove == 0 {
+                if opens {
                     long_next += d.size;
                 } else {
                     assert(!long_next.lt(d.size), "open interest underflow");
                     long_next -= d.size;
                 }
-            } else if d.remove == 0 {
+            } else if opens {
                 short_next += d.size;
             } else {
                 assert(!short_next.lt(d.size), "open interest underflow");
@@ -135,7 +144,7 @@ fn main(
     }
     let from_insurance = min(paid, insurance_in);
     let insurance_next = insurance_in - from_insurance;
-    let bond_used_next = bond_used + paid - from_insurance;
+    assert_eq(bond_used_next, bond_used + paid - from_insurance, "wrong bond_used_next");
     let bad_debt_next = bad_debt + claims - paid;
     assert_amount(insurance_next);
     assert_amount(bad_debt_next);

@@ -99,8 +99,9 @@ function Ticket({ view, m, symbol, routeKey }: { view: PrivateView; m: MarketVie
         <Line label="Worst price you accept">{limit ? px(limit) : "Unavailable"}</Line>
         <Line label="Initial margin">{im !== null ? amountText(view, m.collateral, im, 2) : "-"}</Line>
         <Line label="Fee, at most">{fee !== null ? amountText(view, m.collateral, fee, 2) : "-"}</Line>
+        <Line label="Worst close spread">{m.maxCloseSpreadBps !== null ? `${Number(m.maxCloseSpreadBps) / 100}%` : "Set by your maker"}</Line>
       </div>
-      <p className={styles.note}>Rooq locks your margin privately and waits for a maker. A match isn&apos;t guaranteed. If nothing matches by expiry, your funds come back.</p>
+      <p className={styles.note}>Rooq locks your margin privately and waits for a maker. A match isn&apos;t guaranteed. If nothing matches by expiry, your funds come back.{m.maxCloseSpreadBps !== null ? " When you close, the price is the mark less your maker's close spread, which this market caps at the figure above." : ""}</p>
       <RelayLabel />
       {!m.markFresh ? <p className="notice" data-tone="warning" role="alert">The price is out of date. New positions are blocked until it refreshes.</p> : null}
       {note ? <p className="notice" role="status">{note}</p> : null}

@@ -9,7 +9,9 @@ import { badRequest, ServiceError } from "../lib/errors";
 import type { ChainContext } from "../lib/chain";
 import { runService, type ServiceContext } from "../lib/service";
 import { toHex32 } from "@rooq/private-sdk";
+import { FoldedRatios } from "../lib/folded-ratios";
 import { PublicIndex } from "../lib/public-index";
+import { forwardQuote } from "../lib/quote-proxy";
 import type { Hex } from "viem";
 
 const PAGE_LIMIT = 512;
@@ -17,13 +19,16 @@ const PAGE_LIMIT = 512;
 const MARKETS_CACHE_MS = 2_000;
 const PUBLIC_EVENTS_LIMIT = 5_000;
 const BATCH_LIMIT = 256;
+/** /v1/claims/ratio reads the chain for every delta nobody asked about recently, so its batch and rate are much smaller. */
+const RATIO_BATCH_LIMIT = 32;
+const RATIO_PER_MINUTE = 120;
 const READ_PER_MINUTE = 600;
 const QUOTE_PER_MINUTE = Number(process.env.SPOT_QUOTE_PER_MINUTE ?? 30);
 const quoteUrls = (process.env.SPOT_QUOTE_URLS ?? `http://127.0.0.1:${PORTS.coordinator},http://127.0.0.1:${PORTS.riskA},http://127.0.0.1:${PORTS.riskB}`).split(",").map((u) => u.trim().replace(/\/+$/, "")).filter((u) => u !== "");
 
-function hex32List(body: Record<string, unknown>, key: string): Hex[] {
+function hex32List(body: Record<string, unknown>, key: string, limit = BATCH_LIMIT): Hex[] {
   const list = body[key];
-  if (!Array.isArray(list) || list.length === 0 || list.length > BATCH_LIMIT) throw badRequest(`${key} must be an array of 1 to ${BATCH_LIMIT} entries.`);
+  if (!Array.isArray(list) || list.length === 0 || list.length > limit) throw badRequest(`${key} must be an array of 1 to ${limit} entries.`);
   return list.map((v, i) => {
     if (typeof v !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(v)) throw badRequest(`${key}[${i}] must be a 32-byte hex string.`);
     return v.toLowerCase() as Hex;
@@ -33,15 +38,17 @@ function hex32List(body: Record<string, unknown>, key: string): Hex[] {
 async function marketView(chain: ChainContext, ledgerEpochs: number, id: bigint): Promise<unknown> {
   const m = chain.market(id);
   if (!m) return null;
-  const [funding, price, count, policy] = await Promise.all([chain.funding(id), chain.price(m), chain.oiDeltaCount(id), chain.marketPolicy(id)]);
+  const [funding, price, count, opens, policy] = await Promise.all([chain.funding(id), chain.price(m), chain.oiDeltaCount(id), chain.pendingOpens(id), chain.marketPolicy(id)]);
   return {
     market: id, asset: m.asset, feedId: m.feedId, scale: m.scale, imrWad: m.imrWad, mmrWad: m.mmrWad, penaltyBps: m.penaltyBps, maxFundingPerHourWad: m.maxFundingPerHourWad,
-    takerFeeBps: m.takerFeeBps, maxOiUsdWad: m.maxOiUsdWad, maxPairSize: m.maxPairSize,
-    funding: { index: funding.index, lastEpoch: funding.lastEpoch, head: toHex32(funding.head), consumed: funding.consumed, epochs: ledgerEpochs },
+    takerFeeBps: m.takerFeeBps, maxOiUsdWad: m.maxOiUsdWad, maxPairSize: m.maxPairSize, maxCloseSpreadBps: m.maxCloseSpreadBps,
+    funding: { index: funding.index, lastEpoch: funding.lastEpoch, head: toHex32(funding.head), consumed: funding.consumed, epochs: ledgerEpochs, bondUsed: funding.bondUsed },
     bond: policy.bond,
     closeOnly: policy.closeOnly,
     oiDeltaCount: count,
-    oiPending: (count - funding.consumed) * m.maxPairSize,
+    deltasPending: count - funding.consumed,
+    // What open_pair takes as oi_pending: only unfolded opens count, each at the maximum pair size (#7).
+    oiPending: opens * m.maxPairSize,
     mark: price.fresh ? price.price : 0n,
     markFresh: price.fresh,
     markUpdatedAt: price.updatedAt,
@@ -50,13 +57,26 @@ async function marketView(chain: ChainContext, ledgerEpochs: number, id: bigint)
 
 function buildRoutes(ctx: ServiceContext, index: PublicIndex): Route[] {
   const { chain, ledger } = ctx;
-  let marketsCache: { at: number; body: unknown } | null = null;
-  const marketsBody = async (): Promise<unknown> => {
-    if (marketsCache && Date.now() - marketsCache.at < MARKETS_CACHE_MS) return marketsCache.body;
-    const body = { markets: await Promise.all(chain.markets.map((m) => marketView(chain, ledger.funding.filter((e) => e.market === m.id).length, m.id))) };
-    marketsCache = { at: Date.now(), body };
-    return body;
+  let marketsCache: { at: number; body: { markets: unknown[] }; byId: Map<bigint, unknown> } | null = null;
+  const marketsBody = async (): Promise<{ body: { markets: unknown[] }; byId: Map<bigint, unknown> }> => {
+    if (marketsCache && Date.now() - marketsCache.at < MARKETS_CACHE_MS) return marketsCache;
+    const ids = chain.markets.map((m) => m.id);
+    const views = await Promise.all(ids.map((id) => marketView(chain, ledger.funding.filter((e) => e.market === id).length, id)));
+    marketsCache = { at: Date.now(), body: { markets: views }, byId: new Map(ids.map((id, i) => [id, views[i]])) };
+    return marketsCache;
   };
+  let poolsCache: { at: number; body: unknown } | null = null;
+  const poolsBody = async (): Promise<unknown> => {
+    if (poolsCache && Date.now() - poolsCache.at < MARKETS_CACHE_MS) return poolsCache.body;
+    await chain.refreshProtocolShares();
+    const pools = await Promise.all(chain.spotPools.map(async (p) => {
+      const head = await chain.spotHead(p.id);
+      return { id: p.id, token0: toHex32(p.token0), token1: toHex32(p.token1), feeBps: p.feeBps, protocolBps: p.protocolBps, seeded: head !== 0n, head: toHex32(head), updates: ledger.spotUpdates.filter((u) => u.pool === p.id).length };
+    }));
+    poolsCache = { at: Date.now(), body: { spot: chain.spot, pools, syncedBlock: ledger.syncedBlock } };
+    return poolsCache.body;
+  };
+  const folded = new FoldedRatios((d) => chain.read<bigint>("foldedRatioPlusOne", [d]), { foldedTtlMs: 600_000, unfoldedTtlMs: 15_000, maxEntries: 50_000, concurrency: 4 });
   const after = <T extends { block: bigint }>(rows: readonly T[], from: bigint): T[] => {
     let i = rows.length;
     while (i > 0 && rows[i - 1]!.block >= from) i--;
@@ -141,43 +161,32 @@ function buildRoutes(ctx: ServiceContext, index: PublicIndex): Route[] {
       },
     },
     {
-      method: "POST", pattern: "/v1/claims/ratio", perMinute: READ_PER_MINUTE,
+      method: "POST", pattern: "/v1/claims/ratio", perMinute: RATIO_PER_MINUTE,
       handler: async ({ req }) => {
-        const deltas = hex32List(await readJson(req, 64 * 1024), "deltaCommitments");
-        const ratios = await Promise.all(deltas.map((d) => chain.read<bigint>("foldedRatioPlusOne", [d])));
-        return json({ ratios: ratios.map((r) => (r === 0n ? null : r - 1n)) });
+        const deltas = hex32List(await readJson(req, 64 * 1024), "deltaCommitments", RATIO_BATCH_LIMIT);
+        return json({ ratios: await folded.ratios(deltas) });
       },
     },
     {
       method: "GET", pattern: "/v1/spot/pools", perMinute: READ_PER_MINUTE,
-      handler: async () => {
-        const pools = await Promise.all(chain.spotPools.map(async (p) => {
-          const head = await chain.spotHead(p.id);
-          return { id: p.id, token0: toHex32(p.token0), token1: toHex32(p.token1), feeBps: p.feeBps, seeded: head !== 0n, head: toHex32(head), updates: ledger.spotUpdates.filter((u) => u.pool === p.id).length };
-        }));
-        return json({ spot: chain.spot, pools, syncedBlock: ledger.syncedBlock });
-      },
+      handler: async () => json(await poolsBody()),
     },
     {
       // The read API holds no key, so the quote comes from a service that does. Coordinator first, then the risk workers (REC-06).
       method: "POST", pattern: "/v1/spot/quote", perMinute: QUOTE_PER_MINUTE,
-      handler: async ({ req }) => {
+      handler: async ({ req, client }) => {
         const body = await req.text();
         if (body.length > 4_096) throw new ServiceError(413, "BODY_TOO_LARGE", "Request body is too large.", false);
-        for (const base of quoteUrls) {
-          const res = await fetch(`${base}/v1/spot/quote`, { method: "POST", headers: { "content-type": "application/json" }, body, signal: AbortSignal.timeout(3_000) }).catch(() => null);
-          if (res && res.status < 500) return new Response(res.body, { status: res.status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
-        }
-        throw new ServiceError(503, "QUOTE_UNAVAILABLE", "No pricing service can answer right now.", true);
+        return forwardQuote(quoteUrls, body, client);
       },
     },
-    { method: "GET", pattern: "/v1/markets", perMinute: READ_PER_MINUTE, handler: async () => json(await marketsBody()) },
+    { method: "GET", pattern: "/v1/markets", perMinute: READ_PER_MINUTE, handler: async () => json((await marketsBody()).body) },
     {
       method: "GET", pattern: "/v1/markets/:id", perMinute: READ_PER_MINUTE,
       handler: async ({ params }) => {
         if (!/^\d{1,4}$/.test(params.id ?? "")) throw badRequest("market id must be an integer.");
-        const view = await marketView(chain, ledger.funding.filter((e) => e.market === BigInt(params.id ?? "0")).length, BigInt(params.id ?? "0"));
-        return view === null ? json({ reasonCode: "UNKNOWN_MARKET", message: "Unknown market." }, 404) : json(view);
+        const view = (await marketsBody()).byId.get(BigInt(params.id ?? "0"));
+        return view === undefined ? json({ reasonCode: "UNKNOWN_MARKET", message: "Unknown market." }, 404) : json(view);
       },
     },
     {

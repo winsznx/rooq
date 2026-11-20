@@ -33,7 +33,7 @@ export default function Docs() {
 
         <h2 id="privacy" className="t-section">{copy.system.privacy}</h2>
         <p>
-          Rooq has no accounts on its servers and no analytics. Your private keys stay in your browser. Shields and unshields are public on the chain, and trading privately still has limits. <a href={docsUrl("privacy-policy")}>Read the privacy policy</a>.
+          Rooq has no accounts on its servers. It counts page views as hourly totals, with no cookies and nothing that identifies you. Your private keys stay in your browser. Shields and unshields are public on the chain, and trading privately still has limits. <a href={docsUrl("privacy-policy")}>Read the privacy policy</a>.
         </p>
       </ArticleShell>
     </PublicPage>

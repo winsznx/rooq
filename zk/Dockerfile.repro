@@ -1,0 +1,81 @@
+# Reference environment for scripts/repro-build.sh: linux-amd64, every tool and the CRS slice checked against the
+# sha256 values in zk/toolchain.lock. Build it from this file instead of trusting a pushed image.
+#
+#   docker build --platform linux/amd64 -f zk/Dockerfile.repro -t rooq-repro zk
+#   scripts/repro-build.sh --docker      # runs the build in this image with --network none and the repo read-only
+FROM --platform=linux/amd64 debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates git python3 \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY toolchain.lock /opt/repro/toolchain.lock
+
+RUN python3 -I - <<'PY'
+import hashlib, io, json, os, tarfile, urllib.request
+
+lock = json.load(open("/opt/repro/toolchain.lock"))
+platform = "linux-amd64"
+
+
+def fetch(url, length=None):
+    req = urllib.request.Request(url, headers={"User-Agent": "rooq-repro"})
+    if length is not None:
+        req.add_header("Range", f"bytes=0-{length - 1}")
+    with urllib.request.urlopen(req) as res:
+        data = res.read()
+    if length is not None and len(data) != length:
+        raise SystemExit(f"{url}: got {len(data)} bytes, wanted {length}")
+    return data
+
+
+def checked(data, expected, what):
+    got = hashlib.sha256(data).hexdigest()
+    if got != expected:
+        raise SystemExit(f"{what}: sha256 {got}, lock says {expected}")
+    return data
+
+
+def install(tool, binary):
+    pin = lock[tool]["platforms"][platform]
+    archive = checked(fetch(pin["url"]), pin["sha256"], pin["url"])
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        member = next(m for m in tar.getmembers() if os.path.basename(m.name) == binary)
+        data = checked(tar.extractfile(member).read(), pin["binarySha256"], f"{tool} binary")
+    write(f"/usr/local/bin/{binary}", data, 0o755)
+    return archive
+
+
+def write(path, data, mode=0o644):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(data)
+    os.chmod(path, mode)
+
+
+install("nargo", "nargo")
+install("bb", "bb")
+foundry = install("forge", "forge")
+with tarfile.open(fileobj=io.BytesIO(foundry)) as tar:
+    member = next(m for m in tar.getmembers() if os.path.basename(m.name) == "cast")
+    write("/usr/local/bin/cast", tar.extractfile(member).read(), 0o755)
+
+solc = lock["solc"]
+pin = solc["platforms"][platform]
+write("/opt/solc/solc", checked(fetch(pin["url"]), pin["sha256"], "solc"), 0o755)
+
+crs = lock["crs"]
+write("/opt/crs/bn254_g1_compressed.dat", checked(fetch(f"{crs['source']}/g1_compressed.dat", crs["bn254G1CompressedPoints"] * 32), crs["bn254G1CompressedSha256"], "bn254 g1"))
+write("/opt/crs/bn254_g2.dat", checked(fetch(f"{crs['source']}/g2.dat"), crs["bn254G2Sha256"], "bn254 g2"))
+write("/opt/crs/grumpkin_g1_v2.flat.dat", checked(fetch(f"{crs['source']}/grumpkin_g1_v2.dat", crs["grumpkinG1Points"] * 64), crs["grumpkinG1Sha256"], "grumpkin g1"))
+PY
+
+RUN useradd --create-home --uid 1000 repro
+USER repro
+WORKDIR /home/repro
+# The repository is mounted read-only and owned by another uid, so git needs safe.directory to read it.
+ENV REPRO_CRS_DIR=/opt/crs \
+    REPRO_SOLC=/opt/solc/solc \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=safe.directory \
+    GIT_CONFIG_VALUE_0=*

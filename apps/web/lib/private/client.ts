@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import type { Hex } from "viem";
 import { setPrivateOperations } from "@/lib/operations";
+import type { PoolOracle } from "./chain-state";
 import type { AccountSource, Intent, PrivateOp, PrivateView, RememberedInfo, StartOp, VaultStatus, WorkerEvent, WorkerRequest } from "./types";
 
 export class WalletError extends Error {
@@ -113,10 +114,12 @@ export const wallet = {
     return call<boolean>({ m: "lock" });
   },
   prepareShield: (asset: Hex, amount: bigint) => call<{ inner: Hex; depositIndex: number }>({ m: "prepareShield", asset, amount }),
-  shieldFinished: (depositIndex: number, ok: boolean) => call<boolean>({ m: "shieldFinished", depositIndex, ok }),
+  shieldSent: (depositIndex: number, hash: Hex) => call<boolean>({ m: "shieldSent", depositIndex, hash }),
+  shieldFinished: (depositIndex: number) => call<boolean>({ m: "shieldFinished", depositIndex }),
   start: (intent: Intent, title: string, href: string) => call<string>({ m: "start", op: { intent, title, href } satisfies StartOp }),
   retryOp: (id: string) => call<boolean>({ m: "retryOp", id }),
   readMark: (market: bigint) => call<bigint | null>({ m: "readMark", market }),
+  readPoolOracle: (pool: bigint, market: bigint | null) => call<PoolOracle>({ m: "readPoolOracle", pool, market }),
   cancelOp: (id: string) => call<boolean>({ m: "cancelOp", id }),
   dismissOp: (id: string) => call<boolean>({ m: "dismissOp", id }),
   directOp: (id: string) => call<boolean>({ m: "directOp", id }),

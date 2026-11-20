@@ -1,6 +1,10 @@
 import { keccak256 } from "viem";
+import { ACCOUNT_DERIVATION } from "./account";
 import { ChainState, ServiceDown } from "./chain-state";
+import { PRIVATE_RECORD_VERSION } from "./config";
 import type { Engine } from "./engine";
+import { DEPLOYMENT_MISMATCH } from "./deployment-pin";
+import type { DepositReservation } from "./deposit-reservations";
 import { Named } from "./named";
 import { buildPublicView } from "./public-view";
 import { forgetRemembered, isVerified, loadEncrypted, loadRemembered, markVerified, openRemembered, operationsKey, rememberWithDeviceKey, rememberWithPasskey, saveEncrypted } from "./vault";
@@ -93,7 +97,7 @@ async function openAccount(address: string, seed: bigint, source: AccountSource)
   const r = await loadRuntime();
   chain ??= new ChainState();
   await stopEngine();
-  const scanner = new r.Scanner(seed);
+  const scanner = new r.Scanner(seed, PRIVATE_RECORD_VERSION);
   const accountId = keccak256(r.toHex32(scanner.main.owner));
   if (!(await claimSession(accountId))) throw new Named("OPEN_IN_OTHER_TAB", "This account is already open in another tab. Lock it there or close that tab.", false);
   session = { address, seed, accountId, source };
@@ -103,10 +107,18 @@ async function openAccount(address: string, seed: bigint, source: AccountSource)
     const snapshot = JSON.parse(JSON.stringify(ops, (_k, v: unknown) => (typeof v === "bigint" ? `n:${v.toString()}` : v))) as unknown;
     persistQueue = persistQueue.then(() => saveEncrypted(key, name, snapshot)).catch((error: unknown) => console.warn("rooq: operation records not stored", error));
   };
+  const depositsName = `deposits:${accountId}`;
+  let depositQueue: Promise<void> = Promise.resolve();
+  const persistDeposits = (reservations: readonly DepositReservation[]): Promise<void> => {
+    const snapshot = reservations.map((d) => ({ ...d }));
+    depositQueue = depositQueue.catch((error: unknown) => console.warn("rooq: an earlier deposit reservation wasn't stored", error)).then(() => saveEncrypted(key, depositsName, snapshot));
+    return depositQueue;
+  };
   engine = new r.Engine(chain, scanner, r.addressOfKeys(scanner.main), persist, (view, ops: readonly PrivateOp[]) => {
     if (view) emit({ e: "view", view });
     emit({ e: "ops", ops });
-  });
+  }, persistDeposits);
+  engine.restoreDeposits((await loadEncrypted<DepositReservation[]>(key, depositsName)) ?? []);
   const stored = (await loadEncrypted<unknown[]>(key, name)) ?? [];
   engine.ops = JSON.parse(JSON.stringify(stored), (_k, v: unknown) => (typeof v === "string" && /^n:-?\d+$/.test(v) ? BigInt(v.slice(2)) : v)) as Engine["ops"];
   emit({ e: "ops", ops: engine.publicOps() });
@@ -128,7 +140,7 @@ async function publicTick() {
       runtimePrefetch ??= setTimeout(() => void loadRuntime().catch((error: unknown) => console.warn("rooq: proving engine not loaded yet", error)), 2_000);
     } catch (error) {
       console.warn("rooq: public data read failed", error);
-      const code = error instanceof ServiceDown ? (error.service === "rpc" ? "NETWORK_UNREACHABLE" : `${error.service.toUpperCase()}_UNAVAILABLE`) : "SYNC_FAILED";
+      const code = error instanceof ServiceDown ? (error.service === "rpc" ? "NETWORK_UNREACHABLE" : error.detail === DEPLOYMENT_MISMATCH ? DEPLOYMENT_MISMATCH : `${error.service.toUpperCase()}_UNAVAILABLE`) : "SYNC_FAILED";
       if (chain.deployment) emit({ e: "view", view: buildPublicView(chain, code) });
       else emit({ e: "offline", code });
     }
@@ -158,12 +170,12 @@ async function handle(r: WorkerRequest): Promise<unknown> {
       requireCurrentWallet(r.address);
       if (r.first.toLowerCase() !== r.second.toLowerCase()) throw new Named("NON_DETERMINISTIC", "This wallet signed the same message two different ways, so it can't hold a stable private account. Use a passkey instead.", false);
       await markVerified(r.address);
-      await openAccount(r.address, (await loadRuntime()).seedFromSignature(r.first), "signature");
+      await openAccount(r.address, (await loadRuntime()).seedFromSignature(r.first, ACCOUNT_DERIVATION), "signature");
       return true;
     }
     case "signature": {
       requireCurrentWallet(r.address);
-      await openAccount(r.address, (await loadRuntime()).seedFromSignature(r.signature), "signature");
+      await openAccount(r.address, (await loadRuntime()).seedFromSignature(r.signature, ACCOUNT_DERIVATION), "signature");
       return true;
     }
     case "prfSeed": {
@@ -203,13 +215,18 @@ async function handle(r: WorkerRequest): Promise<unknown> {
     }
     case "prepareShield":
       return engine!.prepareShield();
+    case "shieldSent":
+      await engine!.shieldSent(r.depositIndex, r.hash);
+      return true;
     case "shieldFinished":
-      engine!.shieldFinished(r.depositIndex, r.ok);
+      await engine!.shieldFinished(r.depositIndex);
       return true;
     case "start":
       return engine!.start(r.op);
     case "readMark":
       return chain!.readMark(r.market);
+    case "readPoolOracle":
+      return (chain ??= new ChainState()).readPoolOracle(r.pool, r.market);
     case "retryOp":
       engine!.retry(r.id);
       return true;

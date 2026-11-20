@@ -56,6 +56,7 @@ export const DOC_SECTIONS: readonly DocSection[] = [
     title: "Builders",
     pages: [
       { slug: "contracts", title: "Contracts", description: "Every Rooq contract, the fixed numbers inside them and how to check them yourself." },
+      { slug: "reproducible-builds", title: "Check the verifiers", description: "Rebuild every circuit and verifier from the repo and match them against the chain." },
       { slug: "api-and-sdk", title: "API and SDK", description: "The private read API, the relayer and the TypeScript SDK." },
     ],
   },

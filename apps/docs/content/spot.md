@@ -30,9 +30,9 @@ The pool fee on testnet is 0.30% per pool, taken from the amount going in. It st
 
 ## Order of trades
 
-Pools process requests one at a time, in the order they entered the chain's note tree. This stops the operator from reordering trades or putting its own trade ahead of one it has seen.
+Pools process requests one at a time, in the order they entered the chain's note tree, so the operator can't reorder the requests it runs. That doesn't stop it trading ahead of you. The operator can read every request, so it can keep its own swap requests waiting earlier in the tree, run one just before yours and let the others expire. Your minimum is what limits what that can cost you, so keep your slippage limit tight.
 
-The operator can still skip a request. If that happens, your request expires and your tokens come back. Your minimum protects you from everything else.
+The operator can also skip your request. If that happens, it expires and your tokens come back.
 
 ```who-sees
 Public chain | - That a pool changed. Not the amount, the token direction or the trader

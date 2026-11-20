@@ -1,3 +1,5 @@
+import { PV_URL } from "./pv-url";
+
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8700/api/v1";
 const RPC = process.env.NEXT_PUBLIC_RPC_URL ?? "http://127.0.0.1:8545";
 const MAKER = process.env.NEXT_PUBLIC_MAKER_URL ?? "http://127.0.0.1:8701";
@@ -14,7 +16,7 @@ function origin(url: string): string {
 }
 
 export function connectSources(isDev: boolean): string[] {
-  return ["'self'", origin(API), origin(RPC), origin(MAKER), origin(READ), origin(RELAYER), origin(PRIVATE_RPC), "data:", "https://rpc.testnet.chain.robinhood.com", "https://explorer.testnet.chain.robinhood.com", isDev ? "ws://localhost:*" : ""].filter(Boolean);
+  return ["'self'", origin(API), origin(RPC), origin(MAKER), origin(READ), origin(RELAYER), origin(PRIVATE_RPC), PV_URL ? origin(PV_URL) : "", "data:", "https://rpc.testnet.chain.robinhood.com", "https://explorer.testnet.chain.robinhood.com", isDev ? "ws://localhost:*" : ""].filter(Boolean);
 }
 
 /** No third-party script origin may run near key handling, and only scripts this response nonces may start. */

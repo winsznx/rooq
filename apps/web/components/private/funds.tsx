@@ -8,6 +8,7 @@ import { formatFixed, parseDecimal, toDecimalInput } from "@rooq/sdk";
 import { useTxRunner } from "@/lib/tx";
 import { privatePublicClient } from "@/lib/private/public-client";
 import { wallet, WalletError } from "@/lib/private/client";
+import { PRIVATE_DEPLOYMENT_PIN } from "@/lib/private/config";
 import type { BalanceView, PrivateView, TokenInfo } from "@/lib/private/types";
 import { Dialog } from "@/components/feedback/dialog";
 import { AmountField } from "@/components/funds/amount-field";
@@ -54,18 +55,33 @@ function ShieldForm({ open, onOpenChange, view }: { open: boolean; onOpenChange:
   const go = async () => {
     if (!address || amount === null || amount <= 0n) return;
     setNote(null);
+    if (PRIVATE_DEPLOYMENT_PIN && view.pool.toLowerCase() !== PRIVATE_DEPLOYMENT_PIN.pool.toLowerCase()) {
+      setNote("The private read service named a different Rooq contract than this site trusts, so shielding is blocked.");
+      return;
+    }
+    let depositIndex: number | null = null;
     try {
-      const { inner, depositIndex } = await wallet.prepareShield(asset, amount);
+      const prepared = await wallet.prepareShield(asset, amount);
+      depositIndex = prepared.depositIndex;
+      const { inner } = prepared;
       const allowance = await privatePublicClient.readContract({ address: asset, abi: erc20Abi, functionName: "allowance", args: [address, view.pool] });
       const requests = [
         ...(allowance < amount ? [{ label: `Approve ${t.symbol}`, address: asset, abi: erc20Abi as Abi, functionName: "approve", args: [view.pool, amount] as const }] : []),
         { label: `Shield ${formatFixed(amount, t.decimals, 4)} ${t.symbol}`, address: view.pool, abi: SHIELD_ABI as Abi, functionName: "shield", args: [asset, amount, inner] as const },
       ];
-      const receipts = await run(requests, { title: `Shield ${t.symbol}`, kind: "funds", icons: [{ asset }] });
-      await wallet.shieldFinished(depositIndex, receipts !== null);
+      const shieldStep = requests.length - 1;
+      const index = depositIndex;
+      const receipts = await run(requests, {
+        title: `Shield ${t.symbol}`, kind: "funds", icons: [{ asset }],
+        onSubmitted: (i, hash) => {
+          if (i === shieldStep) void wallet.shieldSent(index, hash).catch((error: unknown) => console.warn("rooq: shield hash not stored", error));
+        },
+      });
       if (receipts) setNote("Shielded. It enters your private balance once the queue is processed, usually within a block or two.");
     } catch (error) {
       setNote(error instanceof WalletError ? error.message : "Your wallet couldn't start this. Check it's connected to the right network.");
+    } finally {
+      if (depositIndex !== null) await wallet.shieldFinished(depositIndex).catch((error: unknown) => console.warn("rooq: shield result not stored", error));
     }
   };
 

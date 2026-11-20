@@ -6,8 +6,9 @@ import type { ServiceContext } from "./service";
 
 /**
  * Proves and submits one batch of the oldest queued entries. Shared by the queue service and the risk workers' fallback,
- * so the same code path keeps liquidations possible when the queue service is down. Anyone may do this, so a race
- * against another processor is expected: `done` tells the caller to resync and look again.
+ * so the same code path keeps liquidations possible when the queue service is down. The batch size goes on chain with the
+ * proof (#19), so entries pushed while it is in flight no longer invalidate it. Anyone may process the queue, so a race
+ * against another processor is still expected: `done` tells the caller to resync and look again.
  */
 export async function processQueueOnce(ctx: ServiceContext, sender: Sender, provers: Provers): Promise<{ done: boolean }> {
   const { ledger, log } = ctx;
@@ -18,7 +19,7 @@ export async function processQueueOnce(ctx: ServiceContext, sender: Sender, prov
   const entries = ledger.queue.slice(processed, processed + count);
   const { inputs, newRoot } = appendWitness(ledger.tree.clone(), entries, ctx.chain.deploymentId);
   const proof = await (await provers.get("append")).prove(inputs);
-  const outcome = await sender.send("processQueue", [bytesToHex(proof.proof), toHex32(newRoot)]);
+  const outcome = await sender.send("processQueue", [bytesToHex(proof.proof), toHex32(newRoot), BigInt(count)]);
   if (outcome.status === "confirmed") {
     ctx.bump("batches");
     ctx.bump("leaves", count);
@@ -26,8 +27,8 @@ export async function processQueueOnce(ctx: ServiceContext, sender: Sender, prov
     return { done: false };
   }
   if (outcome.status === "timeout") return { done: true };
-  // A competing processor, or a reorg, moved the root under this proof. Resync and re-prove.
-  if (outcome.revert.reason === "INVALID_PROOF" || outcome.revert.reason === "NOTHING_QUEUED") {
+  // A competing processor, or a reorg, moved the root or the processed count under this proof. Resync and re-prove.
+  if (outcome.revert.reason === "INVALID_PROOF" || outcome.revert.reason === "NOTHING_QUEUED" || outcome.revert.reason === "BAD_COUNT") {
     ctx.bump("queueRacesLost");
     log.debug("queue_race_lost", { reason: outcome.revert.reason });
     return { done: false };

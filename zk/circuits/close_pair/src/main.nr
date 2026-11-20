@@ -12,10 +12,16 @@
 // Funding settles first and unpaid funding is netted against the payer's gain (D-03). Insurance is never touched, so
 // a payout cannot depend on the order pairs are settled in (REC-04): a losing side that cannot pay short-pays its
 // counterparty only.
+//
+// The relay fee note (rho index 3) comes out of the taker's payout and needs the taker's key whenever it is nonzero, so a
+// keyless prover of mode 1 or 2 can't pay itself from the pair; it can still close with a zero fee.
 use rooq_zk::{
     auth_key, BPS, ceil_div, encrypt, fee, floor_div, FREE_DOMAIN, merkle_root, min, note_commitment, note_inner, NOTE_CT_LEN,
-    oi_delta, output_rho, owner_tag, Pair, pair_pnl, point, PRICE_BITS, rec_nullifier, settle_funding, TREE_DEPTH,
+    OI_CLOSE, oi_delta, output_rho, owner_tag, Pair, pair_pnl, point, PRICE_BITS, rec_nullifier, relay_fee_note, RelayFee,
+    settle_funding, TREE_DEPTH,
 };
+
+mod tests;
 
 fn main(
     pair: Pair,
@@ -24,6 +30,7 @@ fn main(
     sk: Field,
     blind: [Field; 3],
     eph: [Field; 3],
+    relay: RelayFee,
     root: pub Field,
     nf: pub Field,
     cm_out: pub [Field; 3],
@@ -39,13 +46,15 @@ fn main(
     fee_bps: pub Field,
     fee_auth: pub Field,
     fee_pk: pub [Field; 2],
+    cm_relay: pub Field,
+    ct_relay: pub [Field; NOTE_CT_LEN],
 ) {
     let cm = pair.commit(deployment);
     assert_eq(merkle_root(cm, index, path), root, "pair not in tree");
     assert_eq(rec_nullifier(cm, pair.rec_nonce), nf);
     assert_eq(pair.market, market, "wrong market");
     assert_eq(pair.asset, asset);
-    assert_eq(oi_delta(deployment, market, pair.is_short, pair.size, 1, 0, 0, pair.rec_nonce), delta_cm);
+    assert_eq(oi_delta(deployment, market, pair.is_short, pair.size, OI_CLOSE, 0, 0, pair.rec_nonce), delta_cm);
     mark.assert_max_bit_size::<PRICE_BITS>();
     assert(mode * (mode - 1) * (mode - 2) == 0, "unknown mode");
 
@@ -83,8 +92,17 @@ fn main(
         (loser_margin - paid, gainer_margin + paid)
     };
     let taker_fee = if mode == 0 { min(fee(pair.size, fill, fee_bps, scale), taker_after) } else { 0 };
-    let taker_left = taker_after - taker_fee;
-    assert_eq(pair.taker_margin + pair.maker_margin, taker_left + maker_left + taker_fee, "value not conserved");
+    if relay.value != 0 {
+        assert_eq(auth_key(sk), pair.taker_auth, "fee needs the owner key");
+    }
+    relay_fee_note(deployment, asset, relay, nf, 0, 3, cm_relay, ct_relay);
+    assert(!(taker_after - taker_fee).lt(relay.value), "fee above available");
+    let taker_left = taker_after - taker_fee - relay.value;
+    assert_eq(
+        pair.taker_margin + pair.maker_margin,
+        taker_left + maker_left + taker_fee + relay.value,
+        "value not conserved",
+    );
 
     let outs = [
         (taker_left, pair.taker_auth, point(pair.taker_x, pair.taker_y)),

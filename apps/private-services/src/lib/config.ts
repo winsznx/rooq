@@ -8,8 +8,8 @@ export const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url))
 
 const BASE_PORT = Number(process.env.PRIVATE_BASE_PORT ?? 8710);
 
-/** Services listen on BASE_PORT to BASE_PORT + 7 (8710 by default). PRIVATE_BASE_PORT lets a second stack run beside one. */
-export const PORTS = { readApi: BASE_PORT, relayer: BASE_PORT + 1, queue: BASE_PORT + 2, coordinator: BASE_PORT + 3, riskA: BASE_PORT + 4, riskB: BASE_PORT + 5, maker: BASE_PORT + 6, priceRelay: BASE_PORT + 7 } as const;
+/** Services listen on BASE_PORT to BASE_PORT + 8 (8710 by default). PRIVATE_BASE_PORT lets a second stack run beside one. */
+export const PORTS = { readApi: BASE_PORT, relayer: BASE_PORT + 1, queue: BASE_PORT + 2, coordinator: BASE_PORT + 3, riskA: BASE_PORT + 4, riskB: BASE_PORT + 5, maker: BASE_PORT + 6, priceRelay: BASE_PORT + 7, analytics: BASE_PORT + 8 } as const;
 
 export function intEnv(env: Env, name: string, fallback: number, min = 0): number {
   const raw = env[name];

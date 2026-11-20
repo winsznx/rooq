@@ -34,6 +34,8 @@ export interface RunOptions {
   /** Chain-time unix seconds when a signed quote expires. */
   readonly quoteExpiresAt?: number | null;
   readonly icons?: readonly OperationIcon[];
+  /** Called as each transaction leaves the wallet, before its receipt is known. */
+  readonly onSubmitted?: (index: number, hash: Hash) => void;
 }
 
 const PHASE_STAGE: Record<TxPhase, OperationStep["stage"]> = {
@@ -163,6 +165,7 @@ export function useTxRunner(override?: PublicClient) {
             return null;
           }
           track(i, { phase: "submitted", hash });
+          options.onSubmitted?.(i, hash);
           let receipt: TransactionReceipt;
           try {
             receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });

@@ -61,7 +61,7 @@ abstract contract Fixture is Test {
         vm.prank(admin);
         feed.setAnswer(int256(BTC_PRICE * 1e8));
 
-        oracle = new OracleAdapter(admin, address(0), 0);
+        oracle = new OracleAdapter(admin, guardian, address(0), 0, new OracleAdapter.FeedInit[](0));
         vm.prank(admin);
         oracle.registerFeed(FEED_ID, address(feed), address(btc), 3600, 1e18, 1e30);
 

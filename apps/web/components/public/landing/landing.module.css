@@ -21,7 +21,9 @@
 .tag { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--rq-accent-soft); color: var(--rq-accent); font-size: 12px; }
 
 /* hero */
-.hero { min-height: 100svh; align-content: center; position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: 124px var(--rq-page-gutter) 44px; }
+/* Pulling past the top or bottom shows the root background: carbon above the hero, white below the light footer. */
+:global(html):has(.landing) { background: linear-gradient(#0c0f10 50%, #ffffff 50%); }
+.hero { min-height: 100vh; min-height: 100lvh; align-content: center; position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: 124px var(--rq-page-gutter) 44px; }
 .heroGlow { object-fit: cover; object-position: center top; }
 .heroCopy { position: relative; display: grid; justify-items: center; gap: 18px; text-align: center; }
 .h1 { margin: 0; font-size: clamp(44px, 5.6vw, 80px); line-height: 1.075; letter-spacing: -0.02em; font-weight: 400; text-wrap: balance; }

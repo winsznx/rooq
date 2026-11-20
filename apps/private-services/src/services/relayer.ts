@@ -3,14 +3,16 @@
  * users. A job's id is the keccak of its calldata, so a retry of the same request is the same job, before and after a
  * restart. Restart recovery comes from the chain: confirmed jobs are rebuilt from this key's own past transactions.
  */
-import { deriveKeys, scanCreated, type WalletKeys } from "@rooq/private-sdk";
+import { deriveKeys, type WalletKeys } from "@rooq/private-sdk";
 import { intEnv, PORTS, takePrivateKey, takeScalar } from "../lib/config";
 import { json, readJson, type Route } from "../lib/http";
-import { isRelayAction, MAX_BODY_BYTES, parseRelayRequest, type RelayAction, type RelayCall } from "../lib/relay-codec";
+import { allowanceLimits, frontedBonds, RelayAllowance, retryLimitReached, type AllowanceLimits } from "../lib/relay-allowance";
+import { isRelayAction, MAX_BODY_BYTES, parseRelayRequest, SERVICE_TOKEN_HEADER, type RelayAction, type RelayCall } from "../lib/relay-codec";
+import { FeeTable, serviceTokenValid, settleFee } from "../lib/relay-fee";
 import { ServiceError } from "../lib/errors";
-import { Sender } from "../lib/sender";
+import { Sender, type Broadcast } from "../lib/sender";
 import { runService, type ServiceContext } from "../lib/service";
-import { encodeFunctionData, isAddress, keccak256, decodeFunctionData, type Hex } from "viem";
+import { encodeFunctionData, keccak256, decodeFunctionData, type Hex } from "viem";
 
 type JobStatus = "pending" | "confirmed" | "reverted" | "reorged";
 
@@ -46,14 +48,19 @@ class Relayer {
   private recovered = false;
   private recoveryQueue: Hex[] | null = null;
   private recoveryPasses = 0;
+  private readonly limits: AllowanceLimits;
+  private readonly allowance: RelayAllowance;
 
   constructor(
     private readonly ctx: ServiceContext,
     private readonly sender: Sender,
-    private readonly fee: { readonly keys: WalletKeys; readonly minimums: ReadonlyMap<bigint, bigint> } | null,
+    private readonly fee: { readonly keys: WalletKeys; readonly table: FeeTable } | null,
+    private readonly serviceToken: string | null,
   ) {
     this.finalityBlocks = BigInt(intEnv(process.env, "RELAYER_FINALITY_BLOCKS", 64, 1));
     this.rebroadcastMs = intEnv(process.env, "RELAYER_REBROADCAST_MS", 30_000, 1_000);
+    this.limits = allowanceLimits(process.env);
+    this.allowance = new RelayAllowance(this.limits);
   }
 
   private view(job: Job): Record<string, unknown> {
@@ -92,7 +99,14 @@ class Relayer {
     this.ctx.log.info("job_status", { action: job.action, status, reasonCode, tx: job.tx });
   }
 
-  async submit(action: RelayAction, body: Record<string, unknown>): Promise<Response> {
+  /** Exit bonds fronted and not yet back, counting requests still in flight. */
+  private bondsOut(): number {
+    let pending = 0;
+    for (const job of this.jobs.values()) if (job.action === "requestExit" && job.status === "pending") pending++;
+    return pending + frontedBonds(this.ctx.ledger.exits, this.sender.account.address, (nf) => this.ctx.ledger.consumption(nf) !== undefined);
+  }
+
+  async submit(action: RelayAction, body: Record<string, unknown>, client: string, presentedToken: string | null = null): Promise<Response> {
     if (!this.recovered) throw new ServiceError(503, "NOT_READY", "The relayer is still recovering jobs from the chain.", true);
     const call = parseRelayRequest(action, body);
     const value = action === "requestExit" ? this.ctx.chain.exitBond : 0n;
@@ -100,6 +114,9 @@ class Relayer {
     const id = keccak256(data);
     const existing = this.jobs.get(id);
     if (existing && (existing.status === "pending" || existing.status === "confirmed")) return json(this.view(existing), 200);
+    if (retryLimitReached(existing, this.limits.maxRevertedAttempts)) {
+      throw new ServiceError(422, "RETRY_LIMIT", "This request already reverted on chain. Prove it again before resending.", false, { lastReason: existing?.reasonCode ?? null });
+    }
     const landed = await this.landedAlready(call, id);
     if (landed) return json(this.view(landed), 200);
     for (const nf of call.nullifiers) {
@@ -107,19 +124,29 @@ class Relayer {
       if (holder && holder !== id) throw new ServiceError(409, "NULLIFIER_IN_FLIGHT", "Another request spending this record is already being submitted.", true);
     }
     if (this.backlog() >= MAX_BACKLOG) throw new ServiceError(503, "QUEUE_FULL", "The relayer is at capacity. Try again shortly.", true);
-    if ((await this.sender.balance()) < MIN_GAS_BALANCE + value) throw new ServiceError(503, "INSUFFICIENT_GAS", "The relayer is out of gas funds.", true);
-
-    if (action === "spend") this.requireFeeNote(call);
-    const refused = await this.sender.simulate(call.functionName, call.args, value);
-    if (refused) throw new ServiceError(422, refused.reason === "NULLIFIER_SPENT" ? "NULLIFIER_SPENT" : refused.reason, "The contract would reject this request.", refused.reason === "UNKNOWN_ROOT" || refused.reason === "STALE_AS_OF" || refused.reason === "ORACLE_UNAVAILABLE" || refused.reason === "FUNDING_STALE", refused.name ? { errorName: refused.name } : undefined);
+    if (action === "requestExit" && this.bondsOut() >= this.limits.maxFrontedBonds) {
+      throw new ServiceError(503, "EXIT_BOND_CAP", "The relayer has fronted all the exit bonds it can for now. Try again later.", true);
+    }
+    const { settlement } = settleFee(call, this.fee, this.ctx.chain.deploymentId, serviceTokenValid(presentedToken, this.serviceToken));
+    // Charged before any RPC work, so a client out of allowance costs no balance read or simulation. An LP add's two locks
+    // cost what two separate locks would, and are refused whole.
+    const charge = settlement === "free" ? { action: action === "lockPair" ? ("lock" as const) : action, units: action === "lockPair" ? 2 : 1 } : null;
+    if (charge) {
+      const spent = this.allowance.charge(charge.action, client, Date.now(), charge.units);
+      if (spent) {
+        this.ctx.bump("allowanceRefusals");
+        throw new ServiceError(429, "RELAY_ALLOWANCE_SPENT", "The relayer's free allowance for this is used up for now. Try again later.", true, { limit: spent });
+      }
+    }
 
     let broadcast;
     try {
-      broadcast = await this.sender.broadcast(call.functionName, call.args, value);
+      broadcast = await this.send(call, value);
     } catch (error) {
-      this.ctx.log.error("broadcast_failed", error, { action });
-      throw new ServiceError(503, "RPC_UNAVAILABLE", "The transaction could not be sent.", true);
+      if (charge) this.allowance.refund(charge.action, client, charge.units);
+      throw error;
     }
+    this.ctx.bump(`fees_${settlement}`);
     const job: Job = existing ?? { id, action, status: "pending", reasonCode: null, tx: null, raw: null, block: null, blockHash: null, attempts: 0, createdAt: Date.now(), updatedAt: Date.now(), call };
     job.attempts += 1;
     job.status = "pending";
@@ -139,27 +166,27 @@ class Relayer {
     return json(this.view(job), 202);
   }
 
-  /**
-   * D-05: the spend's third output must be a note this relayer can open, worth at least the configured fee for its asset.
-   * The asset and amount stay hidden from everyone else, and the proof fixes the note, so reading it here is enough.
-   */
-  private requireFeeNote(call: RelayCall): void {
-    if (!this.fee || this.fee.minimums.size === 0) return;
-    const inputs = call.args[1] as { commitments: readonly Hex[]; ciphertexts: readonly (readonly Hex[])[] };
-    const note = scanCreated(this.fee.keys, this.ctx.chain.deploymentId, [{ firstLeafIndex: 0, commitments: [BigInt(inputs.commitments[2]!)], ciphertexts: [inputs.ciphertexts[2]!.map(BigInt)] }])[0];
-    if (!note) throw new ServiceError(402, "RELAYER_FEE_REQUIRED", "The third spend output must be a fee note to this relayer's address.", false, { feeAddress: this.feeAddressView() });
-    const minimum = this.fee.minimums.get(note.asset);
-    if (minimum === undefined) throw new ServiceError(402, "RELAYER_FEE_ASSET", "This relayer does not take fees in that asset.", false);
-    if (note.value < minimum) throw new ServiceError(402, "RELAYER_FEE_TOO_LOW", "The fee note is below this relayer's minimum.", false);
-    this.ctx.bump("feeNotesAccepted");
+  /** Checks gas, simulates and broadcasts. Throws when nothing was sent. */
+  private async send(call: RelayCall, value: bigint): Promise<Broadcast> {
+    if ((await this.sender.balance()) < MIN_GAS_BALANCE + value) throw new ServiceError(503, "INSUFFICIENT_GAS", "The relayer is out of gas funds.", true);
+    const refused = await this.sender.simulate(call.functionName, call.args, value);
+    if (refused) throw new ServiceError(422, refused.reason === "NULLIFIER_SPENT" ? "NULLIFIER_SPENT" : refused.reason, "The contract would reject this request.", refused.reason === "UNKNOWN_ROOT" || refused.reason === "STALE_AS_OF" || refused.reason === "ORACLE_UNAVAILABLE" || refused.reason === "FUNDING_STALE", refused.name ? { errorName: refused.name } : undefined);
+    try {
+      return await this.sender.broadcast(call.functionName, call.args, value);
+    } catch (error) {
+      this.ctx.log.error("broadcast_failed", error, { action: call.action });
+      throw new ServiceError(503, "RPC_UNAVAILABLE", "The transaction could not be sent.", true);
+    }
   }
 
   private feeAddressView(): unknown {
     return this.fee ? { auth: this.fee.keys.auth, pk: this.fee.keys.pk } : null;
   }
 
+  /** `quotes` per action and asset (`*` for every action with a fee output); empty when every fee is zero. */
   feeInfo(): Response {
-    return json({ address: this.feeAddressView(), minimums: this.fee ? [...this.fee.minimums].map(([asset, amount]) => ({ asset: `0x${asset.toString(16).padStart(40, "0")}`, amount })) : [] });
+    const quotes = this.fee ? this.fee.table.quotes() : [];
+    return json({ address: this.feeAddressView(), quotes, minimums: quotes.filter((q) => q.action === "*" || q.action === "spend").map(({ asset, amount }) => ({ asset, amount })) });
   }
 
   /** A restarted relayer or a repeated request finds an already-settled job through the chain, not a local store. */
@@ -249,7 +276,8 @@ class Relayer {
       }
     }
     await this.reclaimBonds();
-    this.ctx.liveness.backlog = { pendingJobs: pending };
+    this.allowance.prune();
+    this.ctx.liveness.backlog = { pendingJobs: pending, bondsFronted: this.bondsOut() };
     this.ctx.liveness.details = { jobsTracked: this.jobs.size };
   }
 
@@ -311,30 +339,22 @@ class Relayer {
   }
 }
 
-function parseMinimums(raw: string): Map<bigint, bigint> {
-  const out = new Map<bigint, bigint>();
-  for (const part of raw.split(",").map((p) => p.trim()).filter((p) => p !== "")) {
-    const [asset, amount] = part.split(":");
-    if (!asset || !amount || !isAddress(asset) || !/^\d+$/.test(amount)) throw new Error("RELAYER_MIN_FEES entries are asset:amount");
-    out.set(BigInt(asset), BigInt(amount));
-  }
-  return out;
-}
-
 await runService({
   name: "relayer",
   port: intEnv(process.env, "PORT", PORTS.relayer, 1),
   init(ctx) {
     const sender = new Sender(ctx.chain, takePrivateKey(process.env, "RELAYER_TX_KEY"), ctx.log);
     const feeSeed = process.env.RELAYER_FEE_SEED;
-    const relayer = new Relayer(ctx, sender, feeSeed ? { keys: deriveKeys(takeScalar(process.env, "RELAYER_FEE_SEED")), minimums: parseMinimums(process.env.RELAYER_MIN_FEES ?? "") } : null);
+    const table = FeeTable.parse(process.env.RELAYER_MIN_FEES ?? "");
+    if (!feeSeed && table.quotes().length > 0) throw new Error("RELAYER_MIN_FEES needs RELAYER_FEE_SEED to open fee notes");
+    const relayer = new Relayer(ctx, sender, feeSeed ? { keys: deriveKeys(takeScalar(process.env, "RELAYER_FEE_SEED")), table } : null, process.env.RELAYER_SERVICE_TOKEN || null);
     const routes: Route[] = [
       {
         method: "POST", pattern: "/v1/relay/:action", perMinute: RELAY_PER_MINUTE,
-        handler: async ({ req, params }) => {
+        handler: async ({ req, params, client }) => {
           const action = params.action ?? "";
           if (!isRelayAction(action)) throw new ServiceError(404, "UNKNOWN_ACTION", "Unknown relay action.", false);
-          return relayer.submit(action, await readJson(req, MAX_BODY_BYTES));
+          return relayer.submit(action, await readJson(req, MAX_BODY_BYTES), client ?? "unknown", req.headers.get(SERVICE_TOKEN_HEADER));
         },
       },
       { method: "GET", pattern: "/v1/jobs/:id", perMinute: 600, handler: ({ params }) => relayer.status(params.id ?? "") },

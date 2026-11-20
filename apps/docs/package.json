@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@rooq/config": "workspace:*",
+    "@rooq/private-sdk": "workspace:*",
     "@rooq/ui": "workspace:*",
     "marked": "18.0.14",
     "next": "16.4.5",

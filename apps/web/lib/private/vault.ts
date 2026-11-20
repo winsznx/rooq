@@ -3,6 +3,9 @@
  * encrypted, under a passkey (WebAuthn PRF) or a non-extractable device key. Operation records are encrypted under a key
  * derived from the account seed, so a different wallet can never read another's records. Nothing here goes to a service.
  */
+import { ACCOUNT_DERIVATION } from "./account";
+import type { AccountDerivation } from "./deployment-pin";
+
 const DB = "rooq-private-v2";
 const STORE = "kv";
 
@@ -86,14 +89,23 @@ const seedBytes = (seed: bigint): Uint8Array => {
 
 export const operationsKey = (seed: bigint): Promise<CryptoKey> => hkdfKey(seedBytes(seed), "rooq/operations/v1");
 
-const rememberName = (address: string) => `remember:${address.toLowerCase()}`;
+// A remembered seed belongs to one account derivation; after a switch the wallet signs again instead of reopening the old account.
+const versioned = (base: string, derivation: AccountDerivation, address: string) => `${base}${derivation === 1 ? "" : `:v${derivation}`}:${address.toLowerCase()}`;
+const DERIVATIONS: readonly AccountDerivation[] = [1, 2];
+const rememberName = (address: string) => versioned("remember", ACCOUNT_DERIVATION, address);
 const verifiedName = (address: string) => `verified:${address.toLowerCase()}`;
-const deviceKeyName = (address: string) => `device-key:${address.toLowerCase()}`;
+const deviceKeyName = (address: string) => versioned("device-key", ACCOUNT_DERIVATION, address);
 
 export const loadRemembered = (address: string): Promise<Remembered | undefined> => get<Remembered>(rememberName(address));
 export const isVerified = async (address: string): Promise<boolean> => (await get<boolean>(verifiedName(address))) === true;
 export const markVerified = (address: string): Promise<void> => put(verifiedName(address), true);
-export const forgetRemembered = (address: string): Promise<void> => del(rememberName(address));
+/** Every remembered seed and device key this wallet has here, under any derivation. */
+export const rememberedNames = (address: string): string[] => DERIVATIONS.flatMap((d) => [versioned("remember", d, address), versioned("device-key", d, address)]);
+
+/** Forgets this wallet under every derivation, so a seed remembered before a switch doesn't stay on the device. */
+export async function forgetRemembered(address: string): Promise<void> {
+  for (const name of rememberedNames(address)) await del(name);
+}
 
 export async function rememberWithPasskey(address: string, seed: bigint, prf: Uint8Array, credentialId: string, accountId: string): Promise<void> {
   const blob = await seal(await hkdfKey(prf, "rooq/remember/v1"), seed.toString(16));

@@ -10,12 +10,16 @@ optimizer = true
 optimizer_runs = 200
 via_ir = false
 bytecode_hash = "none"
-# ClearingHouse sits near the 24,576-byte EIP-170 limit; it alone is optimized for size.
+# ClearingHouse and PrivatePairs sit near the 24,576-byte EIP-170 limit; only they are compiled via IR (ADR-007).
 additional_compiler_profiles = [{ name = "size", optimizer_runs = 200, via_ir = true }]
-compilation_restrictions = [{ paths = "src/perps/ClearingHouse.sol", via_ir = true }]
+compilation_restrictions = [
+  { paths = "src/perps/ClearingHouse.sol", via_ir = true },
+  { paths = "src/privacy/PrivatePairs.sol", via_ir = true },
+]
 fs_permissions = [
   { access = "read", path = "./test/vectors" },
   { access = "read", path = "../config" },
+  { access = "read", path = "../zk/circuits/keys" },
   { access = "read-write", path = "./deployments" },
 ]
 remappings = [

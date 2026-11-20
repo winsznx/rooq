@@ -1,14 +1,20 @@
 // Adds liquidity from two LP locks, one per token, into a private LP claim (SPOT-04). Same arithmetic as SpotPool.addLiquidity:
 // the first deposit burns MINIMUM_LIQUIDITY against donation attacks, later deposits are taken at the current ratio, and the
 // unused side returns to the owner as a FREE note.
+//
+// The locks' t3 commit a price band: the add runs only while P = r1 * WAD / r0 is within [lock0.t3, lock1.t3]. On a fresh pool
+// that is the depositor's own ratio. No shares floor is needed: with price pinned, share value can't be pushed down.
+// lockPair writes the two locks at adjacent leaves, so no intent can sit between them and be stranded by the add.
 use rooq_zk::{
-    assert_le, encrypt, floor_div, floor_sqrt, FREE_DOMAIN, Lock, LP_CT_LEN, LpClaim, merkle_root, min, note_commitment, note_inner,
+    assert_price_in_band, encrypt, floor_div, floor_sqrt, FREE_DOMAIN, Lock, LP_CT_LEN, LpClaim, merkle_root, min, note_commitment, note_inner,
     NOTE_CT_LEN, output_rho, point, POOL_CT_LEN, pool_head, pool_plaintext, PoolState, rec_nonce, rec_nullifier, RESERVE_BITS, ROLE_LP,
     TREE_DEPTH,
 };
 
 global KEYS: u32 = 3;
 global MINIMUM_LIQUIDITY: Field = 1000;
+
+mod tests;
 
 struct Held {
     lock: Lock,
@@ -54,7 +60,7 @@ fn main(
     assert((a.market == pool) & (b.market == pool), "wrong pool");
     assert((a.t2 == 0) & (b.t2 == 1), "wrong sides");
     assert((a.asset == token0) & (b.asset == token1), "wrong assets");
-    assert((a.t4 == b.t4) & (a.t3 == b.t3), "locks are not linked");
+    assert(a.t4 == b.t4, "locks are not linked");
     assert((a.owner_auth == b.owner_auth) & (a.owner_x == b.owner_x) & (a.owner_y == b.owner_y), "different owners");
     now.assert_max_bit_size::<64>();
     assert((!a.expiry.lt(now)) & (!b.expiry.lt(now)), "intent expired");
@@ -62,16 +68,22 @@ fn main(
     b.amount.assert_max_bit_size::<RESERVE_BITS>();
 
     if head == 0 {
-        assert((state.r0 == 0) & (state.r1 == 0) & (state.supply == 0) & (state.last_leaf == 0), "fresh pool has state");
+        assert(
+            (state.r0 == 0) & (state.r1 == 0) & (state.supply == 0) & (state.last_leaf == 0) & (state.proto0 == 0)
+                & (state.proto1 == 0),
+            "fresh pool has state",
+        );
     } else {
         assert_eq(pool_head(deployment, pool, state), head, "head mismatch");
     }
+    assert_eq(lock1.index, lock0.index + 1, "LP locks not adjacent");
     let leaf0 = lock0.index + 1;
-    let leaf1 = lock1.index + 1;
-    assert(state.last_leaf.lt(leaf0) & state.last_leaf.lt(leaf1), "intent out of order");
-    let leaf = if leaf0.lt(leaf1) { leaf1 } else { leaf0 };
+    assert(state.last_leaf.lt(leaf0), "intent out of order");
+    let leaf = leaf0 + 1;
 
     let (d0, d1) = (a.amount, b.amount);
+    let (p0, p1) = if state.supply == 0 { (d0, d1) } else { (state.r0, state.r1) };
+    assert_price_in_band(p0, p1, a.t3, b.t3);
     let (used0, used1, shares, supply_next) = if state.supply == 0 {
         let s = floor_sqrt(d0 * d1);
         assert(MINIMUM_LIQUIDITY.lt(s), "insufficient liquidity minted");
@@ -83,12 +95,19 @@ fn main(
         (x0, x1, minted, state.supply + minted)
     };
     assert(shares != 0, "insufficient liquidity minted");
-    assert_le(a.t3, shares);
 
     let (r0, r1) = (state.r0 + used0, state.r1 + used1);
     r0.assert_max_bit_size::<RESERVE_BITS>();
     r1.assert_max_bit_size::<RESERVE_BITS>();
-    let next = PoolState { r0, r1, supply: supply_next, last_leaf: leaf, blind: new_blind };
+    let next = PoolState {
+        r0,
+        r1,
+        supply: supply_next,
+        last_leaf: leaf,
+        proto0: state.proto0,
+        proto1: state.proto1,
+        blind: new_blind,
+    };
     assert_eq(pool_head(deployment, pool, next), new_head);
     let plain = pool_plaintext(next);
     for i in 0..KEYS {
@@ -102,8 +121,8 @@ fn main(
         owner_x: a.owner_x,
         owner_y: a.owner_y,
         expiry: 0,
-        min0: 0,
-        min1: 0,
+        price_lo: 0,
+        price_hi: 0,
         rec_nonce: rec_nonce(nf[0], nf[1], 0, lp_salt),
         blind: lp_blind,
     };

@@ -1,39 +1,39 @@
 {
   "note": "Local anvil (31337) on the test's own ports. Services as separate OS processes, real UltraHonk proofs, anvil's public keys and synthetic seeds.",
-  "startedAt": "2026-11-09T01:43:54.179Z",
-  "finishedAt": "2026-11-09T01:57:34.242Z",
-  "passed": false,
-  "logDir": "/var/folders/jz/4r875xns6z57sm2r92bz7xlm0000gn/T/rooq-services-test-27732/logs",
+  "startedAt": "2026-11-17T20:19:50.053Z",
+  "finishedAt": "2026-11-17T20:37:02.430Z",
+  "passed": true,
+  "logDir": "/var/folders/jz/4r875xns6z57sm2r92bz7xlm0000gn/T/rooq-services-test-23684/logs",
   "steps": [
     {
       "step": "all seven services start as separate OS processes and report healthy",
       "ok": true,
-      "ms": 13618,
+      "ms": 14831,
       "detail": {
         "pids": {
-          "read-api": 28242,
-          "relayer": 28243,
-          "queue": 28244,
-          "coordinator": 28245,
-          "risk-a": 28246,
-          "risk-b": 28247,
-          "maker": 28248
+          "read-api": 25590,
+          "relayer": 25591,
+          "queue": 25592,
+          "coordinator": 25593,
+          "risk-a": 25594,
+          "risk-b": 25595,
+          "maker": 25596
         }
       }
     },
     {
       "step": "the queue processor moves shielded deposits into the tree",
       "ok": true,
-      "ms": 4,
+      "ms": 2,
       "detail": {
-        "processed": 28,
-        "root": "0x15fce99be92384e39f9ee939b14ca087059ccd911f222ee3e599d09fb44ef07f"
+        "processed": 29,
+        "root": "0x2e3f3478baad5a11ad0a0714659fb254a33a7e35e08e55439abcd1b191ea875a"
       }
     },
     {
       "step": "client locks through the relayer; the coordinator matches it against a maker lock at the mark plus spread",
       "ok": true,
-      "ms": 14317,
+      "ms": 14218,
       "detail": {
         "entry": "250500000000000000000",
         "size": "4000000000000000000"
@@ -42,7 +42,7 @@
     {
       "step": "price moves; a risk worker liquidates with the traders offline, and the owner recovers its output",
       "ok": true,
-      "ms": 4529,
+      "ms": 5265,
       "detail": {
         "takerOut": "11280000",
         "reward": "4360000",
@@ -52,7 +52,7 @@
     {
       "step": "a claim from a shortfall is redeemed through the relayer once its epoch has folded",
       "ok": true,
-      "ms": 20988,
+      "ms": 26064,
       "detail": {
         "claim": "27800000",
         "ratio": "156834532374100719",
@@ -62,7 +62,7 @@
     {
       "step": "automatic claim redemption: an owner is paid with no action once a worker sees the folded ratio",
       "ok": true,
-      "ms": 80560,
+      "ms": 97205,
       "detail": {
         "claim": "27800000",
         "paid": "3600000",
@@ -72,7 +72,7 @@
     {
       "step": "a real mempool race: both workers submit the same liquidation, the shared nullifier refuses one, and neither stops",
       "ok": true,
-      "ms": 16217,
+      "ms": 21894,
       "detail": {
         "inPool": 2,
         "lostRaces": 5
@@ -81,7 +81,7 @@
     {
       "step": "price moves under the coordinator's proof: it re-proves at the new price and the pair opens",
       "ok": true,
-      "ms": 9643,
+      "ms": 14246,
       "detail": {
         "entry": "101202000000000000000",
         "reproved": 1
@@ -90,15 +90,15 @@
     {
       "step": "worker A is killed mid-run; worker B liquidates alone",
       "ok": true,
-      "ms": 22953,
+      "ms": 27007,
       "detail": {
-        "riskB": 4
+        "riskB": 5
       }
     },
     {
       "step": "the queue service is killed; a risk worker's fallback keeps the tree moving",
       "ok": true,
-      "ms": 17641,
+      "ms": 23109,
       "detail": {
         "fallbackBatches": 2
       }
@@ -106,7 +106,7 @@
     {
       "step": "worker A restarts with no local state and rebuilds the same view from chain plus its key",
       "ok": true,
-      "ms": 406,
+      "ms": 656,
       "detail": {
         "pairsTracked": 7,
         "claimsTracked": 7,
@@ -116,7 +116,7 @@
     {
       "step": "the coordinator restarts with no state and matches a lock placed while it was down",
       "ok": true,
-      "ms": 8946,
+      "ms": 8139,
       "detail": {
         "entry": "100200000000000000000"
       }
@@ -124,59 +124,60 @@
     {
       "step": "the read API and relayer restart with no state: the read API rebuilds, the relayer recovers jobs from the chain",
       "ok": true,
-      "ms": 5562,
+      "ms": 6101,
       "detail": {
-        "recoveredTx": "0xca3832a2dd85d3d0f75f2585028ceaf0bf6930ea802e5a184402c06a8c2c5c25"
+        "recoveredTx": "0x26530aa84c1cc8026a9744e7077d3b25c1665b33906557702d55438699fd14f4"
       }
     },
     {
       "step": "funding: epochs advance from the workers, a worker settles funding on the open pair with no owner key",
       "ok": true,
-      "ms": 6324,
+      "ms": 11338,
       "detail": {
         "notesBefore": 19,
-        "fundingIndex": "340282366920938463468472774098434551840",
+        "fundingIndex": "340282366920938463468479885209545662496",
         "takerMarginAfter": "55000000"
       }
     },
     {
-      "step": "the taker adds margin through the relayer",
+      "step": "the taker adds margin through the relayer, once the pair's update cooldown has passed",
       "ok": true,
-      "ms": 4971,
+      "ms": 7205,
       "detail": {
-        "takerMargin": "59993055"
+        "takerMargin": "59991666"
       }
     },
     {
       "step": "the taker closes through the relayer at the mark less the committed spread, and is paid",
       "ok": true,
-      "ms": 6171,
+      "ms": 11492,
       "detail": {
-        "takerOut": "69456110",
-        "makerOut": "7543890"
+        "takerOut": "68610277",
+        "makerOut": "8389723"
       }
     },
     {
       "step": "a forced exit: the owner requests it through the relayer and, after the delay, a worker closes it with nobody online",
       "ok": true,
-      "ms": 21165,
+      "ms": 26501,
       "detail": {
         "forcedCloses": 1
       }
     },
     {
-      "step": "an unmatched lock is released after expiry through the relayer, and a note is spent and withdrawn through it",
+      "step": "an unmatched lock is released after expiry through the relayer, paying its relay fee from the lock, and a note is spent and withdrawn through it",
       "ok": true,
-      "ms": 15193,
+      "ms": 15188,
       "detail": {
-        "released": "7000000",
+        "released": "6500000",
+        "releaseFee": "500000",
         "withdrawn": "11000000"
       }
     },
     {
       "step": "spot: the coordinator seeds both pools from linked LP locks submitted through the relayer",
       "ok": true,
-      "ms": 26590,
+      "ms": 23008,
       "detail": {
         "pool1Shares": "3162277660167379",
         "pool2Shares": "1414213562373095047801"
@@ -185,7 +186,7 @@
     {
       "step": "spot: the quote gives an executable estimate and price impact, rounded down, without the reserves",
       "ok": true,
-      "ms": 4,
+      "ms": 3,
       "detail": {
         "amountOut": "9871000000000000000",
         "priceImpactBps": 98,
@@ -195,7 +196,7 @@
     {
       "step": "spot: a swap fills against the private pool and pays a shielded note",
       "ok": true,
-      "ms": 8937,
+      "ms": 9247,
       "detail": {
         "out": "9871580343970612988",
         "payout": "26dbc449"
@@ -204,26 +205,36 @@
     {
       "step": "spot: a two-hop swap settles through both pools atomically",
       "ok": true,
-      "ms": 9929,
+      "ms": 9767,
       "detail": {
         "out": "37506635701918876953",
         "swaps": 2
       }
     },
     {
+      "step": "spot: a protocol share set through the timelock accrues on a swap and is swept to the fee address as a shielded note",
+      "ok": true,
+      "ms": 29400,
+      "detail": {
+        "protocolBps": 2500,
+        "cut": "75000",
+        "feeNotes": 1
+      }
+    },
+    {
       "step": "spot: LP add then removal through a signed request pays out both tokens",
       "ok": true,
-      "ms": 21201,
+      "ms": 20913,
       "detail": {
-        "shares": "1535086242800183",
+        "shares": "1520336762124909",
         "out0": "4999999999",
-        "out1": "471339410596540193801"
+        "out1": "462335439792895838772"
       }
     },
     {
       "step": "spot: an unfillable intent is left to expire with a logged reason and is then released to its owner",
       "ok": true,
-      "ms": 8845,
+      "ms": 9345,
       "detail": {
         "locksReleased": 1
       }
@@ -231,7 +242,7 @@
     {
       "step": "spot: an ignored removal request returns to idle automatically (lp_set mode 1) with no key",
       "ok": true,
-      "ms": 21043,
+      "ms": 20314,
       "detail": {
         "idled": 1
       }
@@ -239,9 +250,9 @@
     {
       "step": "spot failover: with the coordinator killed, risk workers take over by themselves using only their own keys",
       "ok": true,
-      "ms": 79546,
+      "ms": 80948,
       "detail": {
-        "swap": "2812712659959271065",
+        "swap": "2759035499694381439",
         "shares": "555045625567985141057",
         "out0": "399999999999999999999",
         "out1": "770232577342854128671",
@@ -254,27 +265,27 @@
     {
       "step": "spot restart: the coordinator comes back with no state, recovers pool state from ciphertexts and executes the next swap",
       "ok": true,
-      "ms": 9405,
+      "ms": 10907,
       "detail": {
-        "out": "2333507064154007294",
+        "out": "2289056958304062267",
         "coordinatorSwapsAfterRestart": 1
       }
     },
     {
       "step": "spot head race: an operator lands an earlier intent ahead of the coordinator, and the coordinator re-proves on the new head",
       "ok": true,
-      "ms": 25553,
+      "ms": 25595,
       "detail": {
         "reproved": 1,
-        "relayedOut": "837754268500029549",
-        "frontRunOut": "743648673767518505",
-        "thirdOut": "649905228626261205"
+        "relayedOut": "821814353140838426",
+        "frontRunOut": "729507332419137896",
+        "thirdOut": "637552712437341780"
       }
     },
     {
       "step": "created market: picked up from MarketCreated, its bond covers a shortfall, and a worker returns the unused bond to the creator",
       "ok": true,
-      "ms": 86494,
+      "ms": 86126,
       "detail": {
         "bond": "20000000",
         "used": "18200000",
@@ -285,7 +296,7 @@
     {
       "step": "relayer rebroadcast: a transaction dropped from the mempool is resent and confirmed",
       "ok": true,
-      "ms": 4330,
+      "ms": 4730,
       "detail": {
         "rebroadcasts": 1
       }
@@ -293,30 +304,274 @@
     {
       "step": "a deep reorg rolls back the ledger, the tree, job status and all service views, and the chain continues",
       "ok": true,
-      "ms": 15455,
+      "ms": 16342,
       "detail": {
         "blocksRolledBack": "42",
         "reorgs": 1,
-        "baselineRoot": "0x2efaef18fdd953d37d5d31958f61f4f2acde31ec8b75ffd3787290b362aae8c4",
+        "baselineRoot": "0x067be62eed1c1b6044baa67b6fec897a060bbafcc4b559d88379509e51de6c45",
         "jobAfterReorg": "reorged"
       }
     },
     {
       "step": "a reorg deeper than the retained checkpoints is answered by a full rebuild from the deployment block",
       "ok": true,
-      "ms": 12125,
+      "ms": 12242,
       "detail": {
         "fullRebuilds": 1,
-        "deepestReorg": "398",
-        "root": "0x2ffcf5b494aaafe2d840c5e7e3f78dad44aecddfae09c7516391d2d423c0740b"
+        "deepestReorg": "421",
+        "root": "0x27a64922a1419e7d2fb6c56a9acf1948a40f292673dc0f1adb77d9e92d279e29"
       }
     },
     {
       "step": "key rotation: services hold old and new keys across the change, an old position migrates forward and a new lock under the new keys is matched",
-      "ok": false,
-      "ms": 202772,
+      "ok": true,
+      "ms": 66391,
       "detail": {
-        "error": "timeout waiting for the old position to migrate forward to the new keys"
+        "keyMigrations": 1,
+        "riskAKeys": {
+          "keysHeld": 2,
+          "currentKeyHeld": true,
+          "retiredKeyRecords": 9,
+          "unreadableRecords": 0
+        },
+        "riskBKeys": {
+          "keysHeld": 2,
+          "currentKeyHeld": true,
+          "retiredKeyRecords": 9,
+          "unreadableRecords": 0
+        }
+      }
+    },
+    {
+      "step": "oracle end states: an exit settles at entry on a dead oracle, the epoch keeps ticking with no accrual, and a dead market sweeps its insurance",
+      "ok": true,
+      "ms": 135209,
+      "detail": {
+        "staleEpochs": 5,
+        "swept": 1,
+        "insurance": "260000"
+      }
+    },
+    {
+      "step": "malformed requests are refused with named reasons",
+      "ok": true,
+      "ms": 1003,
+      "detail": {
+        "not JSON": {
+          "status": 400,
+          "reason": "INVALID_JSON"
+        },
+        "unknown action": {
+          "status": 404,
+          "reason": "UNKNOWN_ACTION"
+        },
+        "missing proof": {
+          "status": 400,
+          "reason": "INVALID_REQUEST"
+        },
+        "wrong field set": {
+          "status": 400,
+          "reason": "INVALID_REQUEST"
+        },
+        "body too large": {
+          "status": 413,
+          "reason": "BODY_TOO_LARGE"
+        },
+        "unknown job": {
+          "status": 404,
+          "reason": "JOB_UNKNOWN"
+        },
+        "bad job id": {
+          "status": 400,
+          "reason": "INVALID_REQUEST"
+        },
+        "wrong method": {
+          "status": 405,
+          "reason": "METHOD_NOT_ALLOWED"
+        },
+        "read: bad limit": {
+          "status": 400,
+          "reason": "INVALID_REQUEST"
+        },
+        "quote: bad pool": {
+          "status": 400,
+          "reason": "INVALID_REQUEST"
+        },
+        "quote: unknown pool": {
+          "status": 422,
+          "reason": "UNKNOWN_POOL"
+        },
+        "relay: swap bad shape": {
+          "status": 400,
+          "reason": "INVALID_REQUEST"
+        },
+        "read: bad path index": {
+          "status": 400,
+          "reason": "INVALID_REQUEST"
+        },
+        "read: nullifier list too big": {
+          "status": 400,
+          "reason": "INVALID_REQUEST"
+        },
+        "forged proof": {
+          "status": 422,
+          "reason": "INVALID_PROOF"
+        }
+      }
+    },
+    {
+      "step": "logs carry no keys, seeds or decrypted values",
+      "ok": true,
+      "ms": 1,
+      "detail": {
+        "bytesScanned": 75947,
+        "checked": [
+          "coordinatorSk",
+          "riskA",
+          "riskB",
+          "newRiskA",
+          "newCoordinator",
+          "makerSeed",
+          "aliceSeed",
+          "deployerKey",
+          "relayerKey",
+          "aliceOneTimeX",
+          "aliceOneTimeHex",
+          "positionNonce"
+        ]
+      }
+    },
+    {
+      "step": "final health: every service reports honest liveness with block, last action and backlog",
+      "ok": true,
+      "ms": 4,
+      "detail": {
+        "read-api": {
+          "lastBlockSeen": "498",
+          "lastAction": null,
+          "backlog": {
+            "blocksBehind": 0
+          },
+          "counters": {}
+        },
+        "relayer": {
+          "lastBlockSeen": "498",
+          "lastAction": {
+            "action": "confirmed:lock",
+            "at": "2026-11-17T20:36:07.556Z",
+            "tx": "0x244b4a14d675d3ec8b93f3fb74ef8bcfac29e3374406add5374b85c817e8dd54"
+          },
+          "backlog": {
+            "pendingJobs": 0,
+            "bondsFronted": 0
+          },
+          "counters": {
+            "fees_free": 33,
+            "jobs_accepted": 49,
+            "jobs_confirmed": 46,
+            "fees_waived": 14,
+            "bondWithdrawals": 2,
+            "fees_paid": 2,
+            "rebroadcasts": 1,
+            "jobs_reorged": 1,
+            "jobs_reverted": 3
+          }
+        },
+        "queue": {
+          "lastBlockSeen": "498",
+          "lastAction": {
+            "action": "processQueue",
+            "at": "2026-11-17T20:37:01.180Z",
+            "tx": "0x8aff757135c6b8412388d9f9bcabcdd87bf7dfc8dc1856cda985e90199adf834"
+          },
+          "backlog": {
+            "queued": 0
+          },
+          "counters": {
+            "batches": 95,
+            "leaves": 251
+          }
+        },
+        "coordinator": {
+          "lastBlockSeen": "498",
+          "lastAction": {
+            "action": "release",
+            "at": "2026-11-17T20:35:57.336Z",
+            "tx": "0xc7631468ec43957397074a53a6605512f9aab26b816e8b938ff1e5dd2bca48ff"
+          },
+          "backlog": {
+            "takersOpen": 0,
+            "makersOpen": 4,
+            "locksAwaitingTree": 0,
+            "spotPending": 0
+          },
+          "counters": {
+            "matches": 3,
+            "locksReleased": 6
+          }
+        },
+        "risk-a": {
+          "lastBlockSeen": "498",
+          "lastAction": {
+            "action": "insuranceSweeps",
+            "at": "2026-11-17T20:36:58.567Z",
+            "tx": "0x6e4b355dbb33cfb59ed1c4106b23dc9500eb5bea8aa5f7c9f8f56c20dbdcbfda"
+          },
+          "backlog": {
+            "unhealthy": 0,
+            "epochsDue": 0,
+            "foldsPending": 0,
+            "settlementsDue": 0,
+            "exitsMatured": 0,
+            "queueBehind": 0,
+            "spotPending": 0
+          },
+          "counters": {
+            "epochs": 9,
+            "reproved": 8,
+            "keyMigrations": 1,
+            "liquidations": 1,
+            "lostRaces": 7,
+            "insuranceSweeps": 1
+          }
+        },
+        "risk-b": {
+          "lastBlockSeen": "498",
+          "lastAction": {
+            "action": "epochs",
+            "at": "2026-11-17T20:35:51.144Z",
+            "tx": "0x3b8175f4a733554f3935ccbeadb2d36eb54ea55af2095a6366572d0f560e914b"
+          },
+          "backlog": {
+            "unhealthy": 0,
+            "epochsDue": 0,
+            "foldsPending": 0,
+            "settlementsDue": 0,
+            "exitsMatured": 0,
+            "queueBehind": 0,
+            "spotPending": 0
+          },
+          "counters": {
+            "reproved": 10,
+            "epochs": 6,
+            "lostRaces": 7,
+            "forcedCloses": 1
+          }
+        },
+        "maker": {
+          "lastBlockSeen": "498",
+          "lastAction": {
+            "action": "lock",
+            "at": "2026-11-17T20:36:07.768Z"
+          },
+          "backlog": {
+            "locksMissing": 0,
+            "expiredToRelease": 0
+          },
+          "counters": {
+            "locksPosted": 22
+          }
+        }
       }
     }
   ]

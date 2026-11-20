@@ -1,6 +1,7 @@
 import { KIND_DEPOSIT, KIND_LEAF, leafOf, MerkleTree, RECORD_FREE, toHex32, type QueueEntry } from "@rooq/private-sdk";
 import { parseEventLogs, type Address, type Hex, type Log } from "viem";
-import type { ChainContext } from "./chain";
+import type { ChainContext, KeySetRead } from "./chain";
+import type { KeyRotationEvent } from "./key-health";
 import type { Logger } from "./log";
 
 export interface LedgerRecord {
@@ -116,6 +117,7 @@ export class Ledger {
   readonly spent: SpentNullifier[] = [];
   readonly spotUpdates: SpotUpdate[] = [];
   readonly createdMarkets: { readonly market: bigint; readonly block: bigint }[] = [];
+  readonly keyRotations: KeyRotationEvent[] = [];
   private readonly consumed = new Map<string, Consumption>();
   private readonly roots: RootEvent[] = [];
   private treeState = new MerkleTree();
@@ -300,6 +302,7 @@ export class Ledger {
     popAbove(this.spent);
     popAbove(this.spotUpdates);
     popAbove(this.createdMarkets);
+    popAbove(this.keyRotations);
     popAbove(this.roots);
     for (const [nf, c] of this.consumed) if (c.block > limit) this.consumed.delete(nf);
     this.checkpoints = this.checkpoints.filter((cp) => cp.n <= limit);
@@ -380,6 +383,9 @@ export class Ledger {
           break;
         case "MarketCreated":
           this.createdMarkets.push({ market: args.market as bigint, block });
+          break;
+        case "KeyRotationActivated":
+          this.keyRotations.push({ epoch: args.epoch as bigint, keys: args.keys as KeySetRead, block });
           break;
         case "PoolUpdated":
           this.spotUpdates.push({ pool: args.pool as bigint, head: BigInt(args.head as Hex), ciphertext: (args.ciphertext as readonly Hex[]).map(BigInt), block });

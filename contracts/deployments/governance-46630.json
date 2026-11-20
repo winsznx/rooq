@@ -1,0 +1,15 @@
+{
+  "chainId": 46630,
+  "minDelay": 172800,
+  "safe": "0xDbE4F5e860F4CCafcb72C144B6806Cd152c7D445",
+  "safeOwners": [
+    "0xbB298F5aabab16286845fd6c3243858700eCCBBe",
+    "0xC75Cba7A135332d249cd43b28482B402A26C828e",
+    "0xDc4A6beF17083118A1A5ecDFe2556625c537D79F"
+  ],
+  "safeSingleton": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
+  "safeThreshold": 2,
+  "timelock": "0x1dE6B4Fa5a4BdDc3D283eA609Ee4c81E3C785c6E",
+  "vetoSafe": "0x17E4A3de5195327367FEa265f8054a8017F560Be",
+  "vetoThreshold": 1
+}
