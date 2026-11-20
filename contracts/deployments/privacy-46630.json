@@ -1,14 +1,32 @@
 {
   "asset": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
   "chainId": 46630,
-  "deploymentId": "68150433591535802731563366965268384349227101366554101",
-  "feed": "0x6266a7d494fD35aEC096aBf2De04c2A814220BDf",
-  "keyGuardian": "0xc1207E46F4F5322033685131a0E2640f2D3324da",
+  "deploymentId": "68150201130028574615962385428955034675092974102098788",
+  "feed": "0x7ae3608de3a5266Ca9B42DCB0Be1b816184f2f62",
+  "governance": {
+    "localStandIn": false,
+    "minDelay": 172800,
+    "safe": "0xDbE4F5e860F4CCafcb72C144B6806Cd152c7D445",
+    "safeOwners": [
+      "0xbB298F5aabab16286845fd6c3243858700eCCBBe",
+      "0xC75Cba7A135332d249cd43b28482B402A26C828e",
+      "0xDc4A6beF17083118A1A5ecDFe2556625c537D79F"
+    ],
+    "timelock": "0x1dE6B4Fa5a4BdDc3D283eA609Ee4c81E3C785c6E",
+    "vetoSafe": "0x17E4A3de5195327367FEa265f8054a8017F560Be"
+  },
+  "heartbeat": 3600,
+  "keyCanceller": "0xDbE4F5e860F4CCafcb72C144B6806Cd152c7D445",
+  "keyGuardian": "0x1dE6B4Fa5a4BdDc3D283eA609Ee4c81E3C785c6E",
+  "keyScheduler": "0x1dE6B4Fa5a4BdDc3D283eA609Ee4c81E3C785c6E",
   "market": 1,
   "marketMap": "TSLA:1,AMZN:2,PLTR:3,NFLX:4,AMD:5",
-  "markets": "0xDCec34FAECaFC1A988b8854521DaBBb1E40bC4af",
-  "oracle": "0x696949Bd13565f3A8364543D6bC8aCfF1e928c79",
-  "otherFeed": "0xF40F0C617D2D02A06a0C39092A2FE4F4315E3A9d",
+  "markets": "0x05185D5fF8A4aBec801CCb7e10D03054cD291AB6",
+  "moduleDelay": 1209600,
+  "oracle": "0x938218c1637B7A7c587E9d4F4FF370502b233DF0",
+  "oracleAdmin": "0x1dE6B4Fa5a4BdDc3D283eA609Ee4c81E3C785c6E",
+  "oracleGuardian": "0xDbE4F5e860F4CCafcb72C144B6806Cd152c7D445",
+  "otherFeed": "0x0e2F770cd5a5137Fc7Aa434aE351983F3D06D54B",
   "perpFeedIds": [
     "0x6de2f904a76a65d9c44155d61fa357669d6ee6469abbaaeaf73bbcd8418a1078",
     "0x8b8739af3469fbc86a28d487fa7fcccdf53f72dc78699d1f2fbe04564e0babc9",
@@ -17,11 +35,11 @@
     "0x520367a3c971fa75a7ff5e19938ba27f19ab93f654e8b7c07ee8750ec1718e9e"
   ],
   "perpFeeds": [
-    "0x6266a7d494fD35aEC096aBf2De04c2A814220BDf",
-    "0xF40F0C617D2D02A06a0C39092A2FE4F4315E3A9d",
-    "0x650dB349dc43053712f4F39c30d79461090f327e",
-    "0x5790F932319Fa43938Db2AC50458F5844bd92210",
-    "0xFC4D029560eC1B461d8Dedd7e9a27f1343308ae0"
+    "0x7ae3608de3a5266Ca9B42DCB0Be1b816184f2f62",
+    "0x0e2F770cd5a5137Fc7Aa434aE351983F3D06D54B",
+    "0xc60F9cfB4519e658928BA1FA7CC8b611aeEd4Ad7",
+    "0xE05Ae4D3FC00B47a2F4d3D170CA039Ab36877d4B",
+    "0x329f8567D5367686c1Cc250e4bDa0A7fFF2De0E9"
   ],
   "perpMarketIds": [
     1,
@@ -44,10 +62,11 @@
     "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
     "0x71178BAc73cBeb415514eB542a8995b82669778d"
   ],
-  "pool": "0x6b3dEA9d7C3FaCbFd8Eb78c101f0C0fF45648DF5",
+  "pool": "0x4285fb6228ddE782782086f241f8Aa89fDDFb364",
   "poolMap": "TSLA:1,AMZN:2,PLTR:3,NFLX:4,AMD:5",
+  "registry": "0x23Ab6958c52D39f6a12F1664E33922AfE760d770",
   "relayOperator": "0x109204c94872210cC9D666A284Ba4069c6DE2E55",
-  "spot": "0x0F792918dC1949de932AC11446fba82beBa32404",
+  "spot": "0x46Ab17E4ce4065995a726441Ff9385EeE8606309",
   "spotTokens": [
     "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
     "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
@@ -55,8 +74,105 @@
     "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
     "0x71178BAc73cBeb415514eB542a8995b82669778d"
   ],
-  "startBlock": 150630822,
+  "startBlock": 154705089,
   "status": "Testnet. TEST oracle relay. Not audited.",
-  "thirdFeed": "0xBf02C81Ee949224ada356e326387710D2300b7Ab",
-  "thirdFeedId": "0xa3ce88654ff28e0f8b36379169bfd35b31aacb100332eeec4281f601434b323a"
+  "thirdFeed": "0x30a82389Ca0a8d4ACCE1e9c90CAC5bd04BF0c75b",
+  "thirdFeedId": "0xa3ce88654ff28e0f8b36379169bfd35b31aacb100332eeec4281f601434b323a",
+  "verifiers": {
+    "append": {
+      "runtimeCodehash": "0xfeaefa223301339e1d08e1d44752aa462e8fa407192620da069809c15de0b446",
+      "verifier": "0x77D5C5419BC331f144ae4d301ae9083F1B07a813",
+      "vkHash": "0x0aebb6a14baf7db1bb2571aea87c07ff62f27f2dde08ce7df73910be0d2864f4"
+    },
+    "bond_release": {
+      "runtimeCodehash": "0x752996d618e0223d93eadbc710959e4f5b38a62e4ae2552acdc0b74f1088adb0",
+      "verifier": "0x1BF9D6d7174e639A9dd5F0e0BdC1eEE7310F8f09",
+      "vkHash": "0x2f57a8c52f7351e244209490f0e976f7819644e8b70913c446b963239a791cc2"
+    },
+    "close_pair": {
+      "runtimeCodehash": "0x3a6d450a04cc492a5c7c91efcc88896a9e551e116420c5934970f1a55e2e6f5d",
+      "verifier": "0x366857CfDD37F3B2E08CDAC85F6955BfAe2A6A57",
+      "vkHash": "0x1a08947ddcfb612ebdd3ef3978ad0645a7fb2dff27d88cdd9bb2cd5debb30df5"
+    },
+    "exit_request": {
+      "runtimeCodehash": "0x77606a1c3c37b38e22e2012f959547101e544538c57402bb66ca56af4caa6ecf",
+      "verifier": "0x5400bFfa9bA293746fD5BD11c878f9a4caA34Dcb",
+      "vkHash": "0x1d6cdddd968fb910dd7a4962d619d8a1d3884d4079ea620514a1266a58d5aa86"
+    },
+    "funding_epoch": {
+      "runtimeCodehash": "0x76cfa23466df6d172ceceff767060e6215dfdb25b560759f760a94a39caf95bd",
+      "verifier": "0x5a48f351Dc2C1bA3937f977185dcFA0fB4CAD00C",
+      "vkHash": "0x03dd4206227e54b3790efce98ea6f65169ec049af072e62033e29a92c784319f"
+    },
+    "insurance_sweep": {
+      "runtimeCodehash": "0x28cddfe70a3fdef4aa2caee77ec62e436e6d6394f515a53915491a8c8a154a26",
+      "verifier": "0x35aa7516a067Ef0b5D99791135598AECa17530E7",
+      "vkHash": "0x22b7e45cb19bf53d65c1fcf24717f560761a4cf232c46aa2477ec9699d403646"
+    },
+    "key_pop": {
+      "runtimeCodehash": "0x522e97fa317503b0707db9957e18099fe3a0477749df7ca709b299ce9f811fd2",
+      "verifier": "0xA4B48267fcf1789dDF67d5255b366F26882d51D3",
+      "vkHash": "0x043a25caa032dd5536575c9811bb1badce38e5e3376269bf711265d39aad6ac2"
+    },
+    "liquidate": {
+      "runtimeCodehash": "0xe7b31ec100020dc2b962b98dec720731f23b3e7cda26789e7a8b1b23bf981cf2",
+      "verifier": "0xC582368db732f5BB2b6b5DB2149312992d207f06",
+      "vkHash": "0x06efccebc7bb93fa480102b9fcc73c336da757817f3a7c7fb1bc1ce54a4f2594"
+    },
+    "lock": {
+      "runtimeCodehash": "0xa546a30c3691c8be96ee51d85a4977e83dc1d46610d0dd53c36ff5def20ff2ca",
+      "verifier": "0x5AD95e973d89C9C3974F1C2fC445fCBE6893e67E",
+      "vkHash": "0x1e50b9dfbf00cccd08dca4da9ae4ec2afadaa480a9c0c893ee1b2591b55b7df7"
+    },
+    "lp_add": {
+      "runtimeCodehash": "0x1faf85e49c559fb8800948843adb72a5451dcb2a7dd6f5fdfeb65a05d2b6f2a6",
+      "verifier": "0x7108085d04CA8DE4dFE784B54a45478B55207bc1",
+      "vkHash": "0x0c3beb6a56336e9aff61415a35c7f0cd1746cbc8884beecf42eeb50c7bd4aa5a"
+    },
+    "lp_remove": {
+      "runtimeCodehash": "0x8a490c3a97f8b556c06a8ef464617f6e2bc902fc069d6c27a5d6a2b07a9aec0d",
+      "verifier": "0x919CaB258010652448c2548E62c07514BC0939b6",
+      "vkHash": "0x0af846351a343b9295ce779628c31dfc1451688743d36531c8c7e3646b030805"
+    },
+    "lp_set": {
+      "runtimeCodehash": "0x2596bab9613cb5fdb2651883824af8caae87d41b669bf587598cceb038d9e386",
+      "verifier": "0xF353F966cee1c28152ce21A615f800336C8460Ee",
+      "vkHash": "0x24ce83bfa6bdeb4caacc5b12ae5b6f6ad2c4aabdff2d41feb7979a49a7a6bdd0"
+    },
+    "open_pair": {
+      "runtimeCodehash": "0x41fea355cf4aab55fcf12e591e85c4a99e7e251d241baea4c576f888078ef20d",
+      "verifier": "0xEe01440cfDfb51b744d1C37420Af10168e826e27",
+      "vkHash": "0x08fcab7218073f89ec46c30acaefea1c20d1795aa466ddf7e22b1d8ac05dadb3"
+    },
+    "pair_update": {
+      "runtimeCodehash": "0x27063412032bd7d493e76fb90e59c63778c6f8f725668d618d3117ef5797e912",
+      "verifier": "0xc284eFC09F9c4a6412F46a8BC878Efc9EBDc53E1",
+      "vkHash": "0x1cf7a224fc08ec4cd4be1e5e0dbd69179ddfe7155841981d7ec5de70677dc1f8"
+    },
+    "redeem_claim": {
+      "runtimeCodehash": "0xc8cf5529e13ae759aa16748b88529ba4227993a5010fe2a35bd64dba0cfd3018",
+      "verifier": "0xD7F7fBAb5b12798A230cB5ed9D1a1682Fe55cfD3",
+      "vkHash": "0x162a553ea7931f60e65c457713ce354896b04c3c3a794db647bfcfa6088000e4"
+    },
+    "release": {
+      "runtimeCodehash": "0xa35501a08e53d8375278858776be6c28ce72e63986ecba1d0815fe4b4048cfff",
+      "verifier": "0x8dd1D06Eb1919e1607290f98ed9D5e3deA0470F1",
+      "vkHash": "0x09aa600743495f1d484ffc658b9ab6ffc5b251569afa786d911ce5decf22979f"
+    },
+    "spend": {
+      "runtimeCodehash": "0x3f9aaf3d39a48a934025579c3e46470ac7e5fbb1a8059f6970e19b7496fbd735",
+      "verifier": "0xae9492E03035781ef5203493E1F5d4C01d43DE1F",
+      "vkHash": "0x0fa89ce9bb022b4c7e204134342ea81bfb4b912ceb84f3a3215178cd0e2e2aec"
+    },
+    "swap": {
+      "runtimeCodehash": "0xfe1804807d4171ca00d855a23339bda01621c69070ad834474d9f4c50b3ec6c7",
+      "verifier": "0x31e22F75f678E8e8deFc022077fE9680509D6715",
+      "vkHash": "0x25b77d72c09f08650948ef09d8e1f5a561e4da01450b6655a44b7cd6b8afadfb"
+    },
+    "sweep_protocol": {
+      "runtimeCodehash": "0xf72d1de7521dbafc7b41eb61c2bde565ea5eb270acec18ed310fc39fad555c9f",
+      "verifier": "0x21920CF6aeB70ecA2A39e5Fa3C7358A5D448b59B",
+      "vkHash": "0x17acf0bd9b002bf1b49f5bf22cc8d8a112d5591506a1e3d4d0b7c38b9b0a8805"
+    }
+  }
 }
