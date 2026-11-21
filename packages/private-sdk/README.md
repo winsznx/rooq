@@ -88,7 +88,6 @@ The package doesn't ship compiled circuits. They're about 4 MB together and must
 | --- | --- |
 | `@rooq/private-sdk` | Keys, notes, encryption, tree, scanning, perps and spot witnesses, outcomes, `Prover` |
 | `@rooq/private-sdk/legacy/v1` | Read-only decoders for record version 1, for wallets migrating off a v1 deployment. Nothing there proves |
-| `@rooq/private-sdk/admin` | Types shared by Rooq's analytics service and admin area. Public chain data only |
 
 Call `await initCrypto()` once before anything that hashes or derives keys.
 
@@ -100,6 +99,14 @@ Call `await initCrypto()` once before anything that hashes or derives keys.
 - Nullifier, exit and claim lookups go in `POST` bodies, so your own secrets never appear in a URL or access log.
 
 Never send a seed, spending key or witness to any server, log or URL, and never fall back to a public transaction when proving fails.
+
+## Versioning
+
+The package follows semver. Before 1.0, a minor version can break the API, and every release says which deployment and record version it targets (see CHANGELOG.md). 0.1.x targets the Robinhood Chain testnet deployment with record version 2.
+
+## Security
+
+Rooq has not been audited. Report vulnerabilities privately to contact@rooq.trade, not in a public issue. See SECURITY.md in the repository.
 
 ## Docs
 

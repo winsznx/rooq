@@ -102,7 +102,13 @@ Every spot pool pairs USDG with one stock token and charges a 30 bps fee.
 
 ## SDK
 
-`@rooq/private-sdk` is the TypeScript package Rooq's own wallet uses. It builds notes, encrypts records, computes tree paths and makes proofs with UltraHonk.
+`@rooq/private-sdk` is the TypeScript package Rooq's own wallet uses. It builds notes, encrypts records, computes tree paths and makes proofs with UltraHonk. It's published on npm under Apache-2.0.
+
+```sh
+npm install @rooq/private-sdk
+```
+
+ESM only, Node 22+ or a modern browser. Call `await initCrypto()` once before deriving keys or hashing. The package doesn't ship compiled circuits: load the one you need from `https://rooq.trade/proving/<circuit>.json` and pass it to `Prover.create`. The npm README has a full example: npmjs.com/package/@rooq/private-sdk.
 
 ```ts
 import { addressOf, deriveKeys, scanCreated } from "@rooq/private-sdk";
