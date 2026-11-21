@@ -46,4 +46,10 @@ None of them can move your money outside the rules. The contracts and proofs che
 
 Anyone can check that an action was accepted against the [public contracts](/contracts). The explorer shows that a proof was accepted. It doesn't show your trade, and your receipt in the app is what holds the details.
 
+## Share a receipt someone can check
+
+In Private activity, open an entry and choose Save this receipt. For anything that paid a private note to you, such as a swap, a transfer you received, a deposit or a close, the file includes that note's token, amount and leaf. Whoever you send it to can check it at [rooq.trade/inspect](https://rooq.trade/inspect). The check runs in their browser and reads the pool contract directly, so it doesn't rely on Rooq's services.
+
+The receipt doesn't include your keys, your wallet address or your other activity, and nobody can use it to spend the note. It proves that a note with that token and amount was created on Rooq. It doesn't prove who holds the note now or that it hasn't been spent, and anyone who has the file can pass it on.
+
 Rooq has not been audited. This page describes the design and the code.

@@ -8,7 +8,13 @@ import { ensureAccount } from "@/lib/private/client";
 import { IconRow, Line, Offline, PageHead, PV, ServiceNotice, styles, SyncBadge, useView } from "./kit";
 
 function saveReceipt(entry: ActivityEntry) {
-  const blob = new Blob([JSON.stringify({ title: entry.title, detail: entry.detail, block: entry.block?.toString() ?? null, tx: entry.tx, fields: entry.fields, note: "A receipt you chose to export. It doesn't include your keys or other activity." }, null, 2)], { type: "application/json" });
+  const file = {
+    title: entry.title, detail: entry.detail, block: entry.block?.toString() ?? null, tx: entry.tx, fields: entry.fields, receipts: entry.receipts,
+    note: entry.receipts.length > 0
+      ? "Anyone can check the notes in this receipt against the chain at https://rooq.trade/inspect. Each one shows a token, an amount and a leaf. It doesn't include your keys, your address or your other activity."
+      : "A receipt you chose to export. It doesn't include your keys or other activity, and nothing in it can be checked on chain.",
+  };
+  const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -49,7 +55,7 @@ function Body() {
           ))}
         </ol>
       )}
-      <p className={styles.note}>Private receipts are decrypted locally. Saving one writes a single file, for you to share by hand.</p>
+      <p className={styles.note}>Private receipts are decrypted locally. Saving one writes a single file, for you to share by hand. Whoever you send it to can check the amounts at rooq.trade/inspect.</p>
     </div>
   );
 }
