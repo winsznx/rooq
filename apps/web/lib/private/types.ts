@@ -1,6 +1,7 @@
 import type { Hex } from "viem";
 import type { OperationKind, OperationStage, OperationStep } from "@/lib/operations";
 import type { ChangeGate } from "./position-gate";
+import type { NoteReceipt } from "./receipt";
 
 /** Everything here crosses from the wallet worker to the page. No spending key, viewing key or seed appears in any of it. */
 
@@ -181,6 +182,8 @@ export interface ActivityEntry {
   readonly block: bigint | null;
   readonly tx: Hex | null;
   readonly fields: readonly { readonly label: string; readonly value: string }[];
+  /** Openings of the private notes this entry created for the account, for a receipt anyone can check on chain. */
+  readonly receipts: readonly NoteReceipt[];
 }
 
 export interface SyncInfo {

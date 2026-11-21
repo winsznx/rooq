@@ -1,5 +1,5 @@
-import { FREE_DOMAIN, RECORD_VERSION, T_INNER, T_NF, T_NOTE, T_RHO } from "./constants.js";
-import { hash } from "./crypto.js";
+import { FREE_DOMAIN, RECORD_VERSION, T_INNER, T_NF, T_NOTE, T_RHO } from "./constants";
+import { hash } from "./crypto";
 
 export function noteInner(owner: bigint, rho: bigint, blind: bigint): bigint {
   return hash([T_INNER, owner, rho, blind]);

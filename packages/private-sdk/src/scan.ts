@@ -1,7 +1,7 @@
-import { FREE_DOMAIN } from "./constants.js";
-import { decrypt } from "./encryption.js";
-import { depositOpening, LEGACY_DEPOSITS, type DepositDerivation, type WalletKeys } from "./keys.js";
-import { noteCommitment, noteInner, ownerNullifier, type OwnedNote } from "./note.js";
+import { FREE_DOMAIN } from "./constants";
+import { decrypt } from "./encryption";
+import { depositOpening, LEGACY_DEPOSITS, type DepositDerivation, type WalletKeys } from "./keys";
+import { noteCommitment, noteInner, ownerNullifier, type OwnedNote } from "./note";
 
 /** `NotesCreated` as emitted by ShieldedPool, decoded. */
 export interface CreatedNotes {

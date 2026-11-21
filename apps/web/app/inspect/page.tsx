@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PublicPage } from "@/components/public/public-chrome";
 import { InspectView } from "./inspect-view";
+import { ReceiptCheckView } from "./receipt-check-view";
 
 export const metadata: Metadata = {
   title: "Inspect a transaction",
-  description: "Paste any Robinhood Chain testnet transaction and see exactly what it made public. Then compare a Rooq trade with a normal one.",
+  description: "Paste any Robinhood Chain testnet transaction and see exactly what it made public, or check a Rooq receipt against the chain.",
   alternates: { canonical: "/inspect" },
 };
 
@@ -23,6 +24,7 @@ export default function InspectPage() {
         <Suspense fallback={null}>
           <InspectView />
         </Suspense>
+        <ReceiptCheckView />
       </section>
     </PublicPage>
   );

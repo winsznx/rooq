@@ -8,7 +8,9 @@ import { getAddress, type Hex } from "viem";
 import { formatFixed } from "@rooq/sdk";
 import type { ChainState, RecordRow } from "./chain-state";
 import type { RecordVersion } from "./deployment-pin";
+import { PRIVATE_CHAIN_ID } from "./config";
 import { changeGate } from "./position-gate";
+import { noteReceipt, type NoteReceipt } from "./receipt";
 import type { ActivityEntry, BalanceView, ClaimView, FundingEntry, LockRole, LockView, LpView, PositionView, PrivateView } from "./types";
 
 const ADDRESS_GAP = 30;
@@ -427,6 +429,9 @@ function buildActivity(chain: ChainState, d: Decoded, positions: ReadonlyMap<num
   const dep = chain.deployment!;
   const px = (v: bigint | null): string => (v === null ? "Unknown" : formatFixed(v, 18, 2));
   const spentAt = (nf: bigint) => chain.spent.get(toHex32(nf));
+  // A v1 commitment omits the record version, so the receipt check (current SDK) can't recompute it.
+  const receipts = (...notes: (HeldNote | undefined)[]): NoteReceipt[] =>
+    d.legacy ? [] : notes.flatMap((n) => (n && n.value > 0n ? [noteReceipt({ leafIndex: n.leafIndex, asset: n.asset, value: n.value, inner: noteInner(n.keys.owner, n.rho, n.blind) }, { chainId: PRIVATE_CHAIN_ID, deploymentId: dep.id })] : []));
 
   const mineDeposits = d.allNotesByRho;
   const depositLeaves = new Set(chain.deposits.map((x) => x.leafIndex));
@@ -446,14 +451,14 @@ function buildActivity(chain: ChainState, d: Decoded, positions: ReadonlyMap<num
   for (const n of mineDeposits.values()) {
     if (n.value === 0n) continue;
     if (depositLeaves.has(n.leafIndex)) {
-      out.push({ icons: [{ asset: hex20(n.asset) }], id: `shield:${n.leafIndex}`, kind: "shield", title: `Shielded ${amt(n.asset, n.value)}`, detail: "Moved from a public wallet into your private balance. The deposit itself is public.", block: n.block, tx: null, fields: [{ label: "Amount", value: amt(n.asset, n.value) }] });
+      out.push({ icons: [{ asset: hex20(n.asset) }], id: `shield:${n.leafIndex}`, kind: "shield", title: `Shielded ${amt(n.asset, n.value)}`, detail: "Moved from a public wallet into your private balance. The deposit itself is public.", block: n.block, tx: null, fields: [{ label: "Amount", value: amt(n.asset, n.value) }], receipts: receipts(n) });
     } else if (n.keyIndex === -1 && !myConsumedBlocks.has(n.block)) {
-      out.push({ icons: [{ asset: hex20(n.asset) }], id: `recv:${n.leafIndex}`, kind: "transfer_in", title: `Received ${amt(n.asset, n.value)}`, detail: "A private transfer to this account.", block: n.block, tx: null, fields: [{ label: "Amount", value: amt(n.asset, n.value) }] });
+      out.push({ icons: [{ asset: hex20(n.asset) }], id: `recv:${n.leafIndex}`, kind: "transfer_in", title: `Received ${amt(n.asset, n.value)}`, detail: "A private transfer to this account.", block: n.block, tx: null, fields: [{ label: "Amount", value: amt(n.asset, n.value) }], receipts: receipts(n) });
     }
   }
   for (const u of chain.unshields) {
     if (!myConsumedTx.has(u.tx.toLowerCase())) continue;
-    out.push({ icons: [{ asset: u.asset }], id: `unshield:${u.tx}`, kind: "unshield", title: `Unshielded ${amt(BigInt(u.asset), u.amount)}`, detail: `Paid to ${getAddress(u.recipient)}. The amount and recipient are public.`, block: u.block, tx: u.tx, fields: [{ label: "Amount", value: amt(BigInt(u.asset), u.amount) }, { label: "Recipient", value: getAddress(u.recipient) }] });
+    out.push({ icons: [{ asset: u.asset }], id: `unshield:${u.tx}`, kind: "unshield", title: `Unshielded ${amt(BigInt(u.asset), u.amount)}`, detail: `Paid to ${getAddress(u.recipient)}. The amount and recipient are public.`, block: u.block, tx: u.tx, fields: [{ label: "Amount", value: amt(BigInt(u.asset), u.amount) }, { label: "Recipient", value: getAddress(u.recipient) }], receipts: [] });
   }
   for (const h of positions.values()) {
     const first = h.versions[0]!;
@@ -464,7 +469,7 @@ function buildActivity(chain: ChainState, d: Decoded, positions: ReadonlyMap<num
     const role = h.side === "maker" ? "Backed" : "Opened";
     out.push({
       icons: [{ market: first.pair.market }], id: `open:${h.id}`, kind: "open", title: `${role} ${sideWord} ${size} ${label}`, detail: `Filled at ${px(first.pair.entry)}.`, block: first.block, tx: null,
-      fields: [{ label: "Size", value: `${size} ${label}` }, { label: "Entry", value: px(first.pair.entry) }, { label: "Your margin", value: amt(first.pair.asset, h.side === "taker" ? first.pair.takerMargin : first.pair.makerMargin) }],
+      fields: [{ label: "Size", value: `${size} ${label}` }, { label: "Entry", value: px(first.pair.entry) }, { label: "Your margin", value: amt(first.pair.asset, h.side === "taker" ? first.pair.takerMargin : first.pair.makerMargin) }], receipts: [],
     });
     for (let i = 1; i < h.versions.length; i++) {
       const [a, b] = [h.versions[i - 1]!, h.versions[i]!];
@@ -472,13 +477,14 @@ function buildActivity(chain: ChainState, d: Decoded, positions: ReadonlyMap<num
       const changed = describeUpdate(a.pair, b.pair, h.side, market?.scale ?? null, label, (v) => amt(a.pair.asset, v));
       out.push({
         icons: [{ market: b.pair.market }], id: `upd:${h.id}:${i}`, kind: "update", title: changed, detail: "A new version of your position.", block: b.block, tx: null,
-        fields: [{ label: "Size", value: formatFixed(b.pair.size, 18, 4) }, { label: "Margin before", value: amt(b.pair.asset, margin(a.pair)) }, { label: "Margin after", value: amt(b.pair.asset, margin(b.pair)) }],
+        fields: [{ label: "Size", value: formatFixed(b.pair.size, 18, 4) }, { label: "Margin before", value: amt(b.pair.asset, margin(a.pair)) }, { label: "Margin after", value: amt(b.pair.asset, margin(b.pair)) }], receipts: [],
       });
     }
     const last = h.versions.at(-1)!;
     const end = chain.ends.get(toHex32(last.nullifier));
     if (end) {
-      const payout = d.allNotesByRho.get(outputRho(last.nullifier, 0n, h.side === "taker" ? 0 : 1))?.value ?? 0n;
+      const payoutNote = d.allNotesByRho.get(outputRho(last.nullifier, 0n, h.side === "taker" ? 0 : 1));
+      const payout = payoutNote?.value ?? 0n;
       const fundingIndex = chain.fundingIndexAt(last.pair.market, end.block) ?? last.pair.fundingIndex;
       const fields = [{ label: "Paid out", value: amt(last.pair.asset, payout) }, { label: "Mark", value: px(end.mark) }];
       if (market && end.kind === "liquidated") {
@@ -488,7 +494,7 @@ function buildActivity(chain: ChainState, d: Decoded, positions: ReadonlyMap<num
         const o = closeOutcome(last.pair, end.mode, end.mark, market.scale, fundingIndex, market.takerFeeBps);
         fields.push({ label: "Fill", value: px(o.fill) }, { label: "Fee", value: amt(last.pair.asset, o.fee) }, { label: "Funding paid", value: amt(last.pair.asset, o.fundingPaid) }, { label: "Short-paid", value: amt(last.pair.asset, o.shortPaid) });
       }
-      out.push({ icons: [{ market: last.pair.market }], id: `end:${h.id}`, kind: end.kind === "liquidated" ? "liquidated" : end.mode === CLOSE_MATURED ? "forced" : "close", title: `${end.kind === "liquidated" ? "Liquidated" : end.mode === CLOSE_MATURED ? "Forced exit" : "Closed"} ${sideWord} ${formatFixed(last.pair.size, 18, 4)} ${label}, paid out ${amt(last.pair.asset, payout)}`, detail: `At mark ${px(end.mark)}.`, block: end.block, tx: end.tx, fields });
+      out.push({ icons: [{ market: last.pair.market }], id: `end:${h.id}`, kind: end.kind === "liquidated" ? "liquidated" : end.mode === CLOSE_MATURED ? "forced" : "close", title: `${end.kind === "liquidated" ? "Liquidated" : end.mode === CLOSE_MATURED ? "Forced exit" : "Closed"} ${sideWord} ${formatFixed(last.pair.size, 18, 4)} ${label}, paid out ${amt(last.pair.asset, payout)}`, detail: `At mark ${px(end.mark)}.`, block: end.block, tx: end.tx, fields, receipts: receipts(payoutNote) });
     }
   }
   for (const l of d.locks) {
@@ -496,10 +502,10 @@ function buildActivity(chain: ChainState, d: Decoded, positions: ReadonlyMap<num
     const r = l.record;
     const out0 = d.allNotesByRho.get(outputRho(l.nullifier, 0n, 0));
     if (r.role === ROLE_SWAP && s) {
-      if (out0 && out0.asset !== r.asset) out.push({ icons: [{ asset: hex20(r.asset) }, { asset: hex20(out0.asset) }], id: `swap:${toHex32(l.commitment)}`, kind: "swap", title: `Swapped ${amt(r.asset, r.amount)} for ${amt(out0.asset, out0.value)}`, detail: "Filled inside your minimum.", block: s.block, tx: s.tx, fields: [{ label: "Paid", value: amt(r.asset, r.amount) }, { label: "Received", value: amt(out0.asset, out0.value) }, { label: "Minimum accepted", value: amt(out0.asset, r.t3) }] });
-      if (out0 && out0.asset === r.asset) out.push({ icons: [{ asset: hex20(r.asset) }], id: `refund:${toHex32(l.commitment)}`, kind: "refund", title: `Refunded ${amt(r.asset, r.amount)}`, detail: "An unfilled swap intent came back.", block: s.block, tx: s.tx, fields: [{ label: "Amount", value: amt(r.asset, r.amount) }] });
+      if (out0 && out0.asset !== r.asset) out.push({ icons: [{ asset: hex20(r.asset) }, { asset: hex20(out0.asset) }], id: `swap:${toHex32(l.commitment)}`, kind: "swap", title: `Swapped ${amt(r.asset, r.amount)} for ${amt(out0.asset, out0.value)}`, detail: "Filled inside your minimum.", block: s.block, tx: s.tx, fields: [{ label: "Paid", value: amt(r.asset, r.amount) }, { label: "Received", value: amt(out0.asset, out0.value) }, { label: "Minimum accepted", value: amt(out0.asset, r.t3) }], receipts: receipts(out0) });
+      if (out0 && out0.asset === r.asset) out.push({ icons: [{ asset: hex20(r.asset) }], id: `refund:${toHex32(l.commitment)}`, kind: "refund", title: `Refunded ${amt(r.asset, r.amount)}`, detail: "An unfilled swap intent came back.", block: s.block, tx: s.tx, fields: [{ label: "Amount", value: amt(r.asset, r.amount) }], receipts: receipts(out0) });
     } else if ((r.role === ROLE_TAKER || r.role === ROLE_MAKER) && s && out0 && out0.asset === r.asset && out0.value === r.amount) {
-      out.push({ icons: [{ asset: hex20(r.asset) }], id: `refund:${toHex32(l.commitment)}`, kind: "refund", title: `Refunded ${amt(r.asset, r.amount)}`, detail: "An expired lock came back to you.", block: s.block, tx: s.tx, fields: [{ label: "Amount", value: amt(r.asset, r.amount) }] });
+      out.push({ icons: [{ asset: hex20(r.asset) }], id: `refund:${toHex32(l.commitment)}`, kind: "refund", title: `Refunded ${amt(r.asset, r.amount)}`, detail: "An expired lock came back to you.", block: s.block, tx: s.tx, fields: [{ label: "Amount", value: amt(r.asset, r.amount) }], receipts: receipts(out0) });
     }
   }
   const seenLp = new Set<string>();
@@ -509,20 +515,20 @@ function buildActivity(chain: ChainState, d: Decoded, positions: ReadonlyMap<num
     const name = poolLabel(chain, l.record.pool);
     const deposited = lpDeposited(d, l, (nf) => spentAt(nf) !== undefined);
     const amounts = deposited?.map((x) => amt(x.asset, x.value));
-    out.push({ icons: poolIcons(chain, l.record.pool), id: `lp:${toHex32(l.commitment)}`, kind: "lp_add", title: amounts ? `Added ${amounts[0]} and ${amounts[1]} to ${name}` : `Added liquidity to ${name}`, detail: `${formatFixed(l.record.shares, 18, 6)} shares.`, block: l.block, tx: null, fields: [...(amounts ?? []).map((value) => ({ label: "Deposited", value })), { label: "Shares", value: formatFixed(l.record.shares, 18, 6) }] });
+    out.push({ icons: poolIcons(chain, l.record.pool), id: `lp:${toHex32(l.commitment)}`, kind: "lp_add", title: amounts ? `Added ${amounts[0]} and ${amounts[1]} to ${name}` : `Added liquidity to ${name}`, detail: `${formatFixed(l.record.shares, 18, 6)} shares.`, block: l.block, tx: null, fields: [...(amounts ?? []).map((value) => ({ label: "Deposited", value })), { label: "Shares", value: formatFixed(l.record.shares, 18, 6) }], receipts: [] });
     const final = [...d.lps].reverse().find((x) => x.keys.pk.x === l.keys.pk.x)!;
     const s = spentAt(final.nullifier);
     if (s && final.record.expiry !== 0n) {
       const out0 = d.allNotesByRho.get(outputRho(final.nullifier, 0n, 0));
       const out1 = d.allNotesByRho.get(outputRho(final.nullifier, 0n, 1));
-      if (out0 || out1) out.push({ icons: poolIcons(chain, final.record.pool), id: `lpout:${toHex32(final.commitment)}`, kind: "lp_remove", title: `Removed ${[out0, out1].flatMap((n) => (n ? [amt(n.asset, n.value)] : [])).join(" and ")} from ${name}`, detail: "Your share of the pool came back as private notes.", block: s.block, tx: s.tx, fields: [out0, out1].flatMap((n) => (n ? [{ label: "Received", value: amt(n.asset, n.value) }] : [])) });
+      if (out0 || out1) out.push({ icons: poolIcons(chain, final.record.pool), id: `lpout:${toHex32(final.commitment)}`, kind: "lp_remove", title: `Removed ${[out0, out1].flatMap((n) => (n ? [amt(n.asset, n.value)] : [])).join(" and ")} from ${name}`, detail: "Your share of the pool came back as private notes.", block: s.block, tx: s.tx, fields: [out0, out1].flatMap((n) => (n ? [{ label: "Received", value: amt(n.asset, n.value) }] : [])), receipts: receipts(out0, out1) });
     }
   }
   for (const c of d.claims) {
     if (c.record.amount === 0n) continue;
     const s = spentAt(c.nullifier);
     const redeemed = d.allNotesByRho.get(outputRho(c.nullifier, 0n, 0));
-    if (s) out.push({ icons: [{ asset: hex20(c.record.asset) }], id: `claim:${toHex32(c.commitment)}`, kind: "claim", title: `Redeemed ${amt(c.record.asset, redeemed?.value ?? 0n)} claim`, detail: "Insurance paid the shortfall at the epoch's ratio.", block: s.block, tx: s.tx, fields: [{ label: "Claim", value: amt(c.record.asset, c.record.amount) }, { label: "Paid", value: amt(c.record.asset, redeemed?.value ?? 0n) }] });
+    if (s) out.push({ icons: [{ asset: hex20(c.record.asset) }], id: `claim:${toHex32(c.commitment)}`, kind: "claim", title: `Redeemed ${amt(c.record.asset, redeemed?.value ?? 0n)} claim`, detail: "Insurance paid the shortfall at the epoch's ratio.", block: s.block, tx: s.tx, fields: [{ label: "Claim", value: amt(c.record.asset, c.record.amount) }, { label: "Paid", value: amt(c.record.asset, redeemed?.value ?? 0n) }], receipts: receipts(redeemed) });
   }
   return out.sort((a, b) => Number((b.block ?? 0n) - (a.block ?? 0n)));
 }

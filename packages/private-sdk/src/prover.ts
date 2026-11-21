@@ -1,6 +1,6 @@
 import { Barretenberg, UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit } from "@noir-lang/noir_js";
-import type { InputMap } from "./witness.js";
+import type { InputMap } from "./witness";
 
 export type { CompiledCircuit };
 

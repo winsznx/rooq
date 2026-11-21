@@ -77,7 +77,7 @@ function tokenOf(address: Address): { symbol: string; decimals: number } | null 
   return KNOWN_TOKENS.get(address.toLowerCase()) ?? null;
 }
 
-async function readToken(client: PublicClient, address: Address): Promise<{ symbol: string; decimals: number }> {
+export async function readToken(client: PublicClient, address: Address): Promise<{ symbol: string; decimals: number }> {
   const known = tokenOf(address);
   if (known) return known;
   try {
@@ -91,7 +91,7 @@ async function readToken(client: PublicClient, address: Address): Promise<{ symb
   }
 }
 
-function amountText(raw: bigint, token: { symbol: string; decimals: number }): string {
+export function amountText(raw: bigint, token: { symbol: string; decimals: number }): string {
   const n = Number(formatUnits(raw, token.decimals));
   return `${n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 6 : 4 })} ${token.symbol}`;
 }
@@ -178,7 +178,7 @@ async function rooqDetails(client: PublicClient, input: Hex, logs: readonly Log[
 }
 
 let cachedClient: PublicClient | null = null;
-function client(): PublicClient {
+export function client(): PublicClient {
   cachedClient ??= createPublicClient({ transport: http(INSPECT_CHAIN.rpcUrls[0], { timeout: 10_000, retryCount: 1 }) });
   return cachedClient;
 }
