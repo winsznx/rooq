@@ -1,8 +1,8 @@
-import { decrypt } from "./encryption.js";
-import { mulGenerator, type Point } from "./crypto.js";
-import { MARKET_PT_LEN } from "./constants.js";
-import { marketHead, type MarketState } from "./pairs.js";
-import { openPoolState, poolHead, type PoolState } from "./spot.js";
+import { decrypt } from "./encryption";
+import { mulGenerator, type Point } from "./crypto";
+import { MARKET_PT_LEN } from "./constants";
+import { marketHead, type MarketState } from "./pairs";
+import { openPoolState, poolHead, type PoolState } from "./spot";
 
 export interface HeldKey {
   readonly sk: bigint;

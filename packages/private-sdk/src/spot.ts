@@ -1,12 +1,12 @@
-import { BPS, LP_PT_LEN, MINIMUM_LIQUIDITY, POOL_CT_LEN, POOL_PT_LEN, PRICE_BAND_BITS, RECORD_VERSION, ROLE_LP, ROLE_SWAP, T_LP, T_POOL, WAD } from "./constants.js";
-import { hash, type Point } from "./crypto.js";
-import { decrypt, encrypt } from "./encryption.js";
-import { randomField, toHex32, type Hex } from "./field.js";
-import { outputRho } from "./note.js";
-import type { PrivateAddress } from "./keys.js";
-import { ceilDiv, deriveRecNonce, lockCommitment, lockInput, noteOutput, recNullifier, type HeldLock, type LockTerms } from "./pairs.js";
-import type { MerkleTree } from "./tree.js";
-import type { InputMap, InputValue } from "./witness.js";
+import { BPS, LP_PT_LEN, MINIMUM_LIQUIDITY, POOL_CT_LEN, POOL_PT_LEN, PRICE_BAND_BITS, RECORD_VERSION, ROLE_LP, ROLE_SWAP, T_LP, T_POOL, WAD } from "./constants";
+import { hash, type Point } from "./crypto";
+import { decrypt, encrypt } from "./encryption";
+import { randomField, toHex32, type Hex } from "./field";
+import { outputRho } from "./note";
+import type { PrivateAddress } from "./keys";
+import { ceilDiv, deriveRecNonce, lockCommitment, lockInput, noteOutput, recNullifier, type HeldLock, type LockTerms } from "./pairs";
+import type { MerkleTree } from "./tree";
+import type { InputMap, InputValue } from "./witness";
 
 const f = (x: bigint): string => toHex32(x);
 const minOf = (a: bigint, b: bigint): bigint => (a < b ? a : b);
